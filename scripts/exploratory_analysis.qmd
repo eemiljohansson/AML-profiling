@@ -84,8 +84,8 @@ These Scripts were used in the analysis:
 Make sure to replace the paths with the correct paths to the scripts. Example: "<your_path>/functions_disease_analyses.R>".
 
 ```{r Loading scripts}
-source("scripts/functions_disease_analyses.R")
-source("scripts/custom_plots.R")
+source("../scripts/functions/functions_disease_analyses.R")
+source("../scripts/functions/custom_plots.R")
 ```
 
 ## Data
@@ -94,9 +94,9 @@ The data used in this analysis is from the Human Protein Atlas (HPA) (<https://w
 
 ```{r Loading data, warning=FALSE}
 # Read data
-data_long <-  read_csv("data/olink_data.csv")
-metadata <- read.xlsx("data/metadata.xlsx")
-rownames(metadata) <- NULL
+data_long <-  read_csv("../data/data_long.csv")
+data_wide <-  read_csv("../data/data_wide.csv")
+metadata <- read.csv("../data/metadata.csv")
 ```
 
 ```{r Setting levels, include=FALSE}
@@ -108,7 +108,7 @@ levels_all <- c(levels_pan_cancer, "Healthy")
 ```{r Setting palettes, include=FALSE}
 # Defining sex-specific colors
 pal_sex <- c("#30D5C8", "lightpink")
-pal_sex <- setNames(pal_sex, c("Male", "Female"))
+pal_sex <- setNames(pal_sex, c("M", "F"))
   
 # Defining disease-specific colors
 pal_all <- c("#8D9FCA", "#E8A29A", "#CDB18A", 
@@ -152,16 +152,6 @@ pal_de <- c("#D3D3D3", "#FF7176", "#92C9DA")
 pal_de <- setNames(pal_de, c("not significant", "significant up", "significant down"))
 ```
 
-Overview of the Olink data and metadata:
-
-```{r Head olink_data_long}
-head(olink_data_long)
-```
-
-```{r Head metadata}
-head(metadata)
-```
-
 # Cohort overview
 
 ## Age
@@ -203,8 +193,6 @@ sex_plot <- metadata |>
 sex_plot
 ```
 
-Age + Sex
-
 ```{r Age and sex, fig.width=20, fig.height=7}
 sex_plot + age_plot
 ```
@@ -229,23 +217,18 @@ cohort_description <- metadata |>
 
 ## UMAP
 
-```{r do UMAP}
+```{r UMAP}
 # Default seed is 123
-umap_data <- do_umap(olink_data = data_long,
-        metadata = metadata,
-        wide = FALSE,
-        impute = FALSE)
+umap_data <- hd_umap(dat = data_wide)
 ```
 
-```{r UMAP code}
+```{r UMAP means}
 # Setting a seed
 umap_data_means <- umap_data$umap_res |>
   left_join(metadata, by = "DAid") |>
   group_by(Disease) |>
   summarize(UMAP1_mean = mean(UMAP1), UMAP2_mean = mean(UMAP2))
 ```
-
-### All
 
 ```{r UMAP plot all colors, fig.width=10, fig.height=7}
 umap_all <- umap_data$umap_res |>
@@ -261,6 +244,8 @@ umap_all <- umap_data$umap_res |>
   #+ guides(fill = F, color = F)
 
 umap_all
+
+ggsave("../plots/UMAP/UMAP all.pdf", width = 10, height = 7)
 ```
 
 ### Highlighting hematological malignancies
@@ -279,10 +264,14 @@ umap_hm <- umap_data$umap_res |>
   #+ guides(fill = F, color = F)
 
 umap_hm
+
+ggsave("../plots/UMAP/UMAP hematological malignancies.pdf", width = 10, height = 7)
 ```
 
 ```{r Supplementary UMAP, fig.width=10, fig.height=14}
 umap_all / umap_hm 
+
+ggsave("../plots/UMAP/UMAP all and HM.pdf", width = 10, height = 14)
 ```
 
 
