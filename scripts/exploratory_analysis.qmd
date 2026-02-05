@@ -274,4 +274,89 @@ umap_all / umap_hm
 ggsave("../plots/UMAP/UMAP all and HM.pdf", width = 10, height = 14)
 ```
 
+# Exporting information
 
+```{r}
+# Summarize number of samples per disease
+metadata |>
+  group_by(Disease) |>
+  summarize(Number_of_samples = n()) |>
+  # pivot wider
+  pivot_wider(names_from = Disease, values_from = Number_of_samples) |>
+  # Write to xlsx
+  write.xlsx("../tables/number_of_samples_per_disease.xlsx")
+
+# Summarize Age IQR1 median and IQR3 per disease
+metadata |>
+  filter(!is.na(Age)) |>
+  group_by(Disease) |>
+  summarize(Median_Age = median(Age),
+            IQR1_Age = quantile(Age, 0.25),
+            IQR3_Age = quantile(Age, 0.75)) |>
+  # collape Median_Age (IQR1_Age - IQR3_Age)
+  mutate(Age_Summary = paste0(Median_Age, " (", IQR1_Age, "-", IQR3_Age, ")")) |>
+  # pivot wider
+  select(Disease, Age_Summary) |>
+  pivot_wider(names_from = Disease, values_from = Age_Summary) |>
+  # Write to xlsx
+  write.xlsx("../tables/age_summary_per_disease.xlsx")
+
+# Summarize missing age in n (%)
+metadata |>
+  group_by(Disease) |>
+  summarize(Missing_Age_n = sum(is.na(Age)),
+            Total_n = n(),
+            Missing_Age_percent = round((Missing_Age_n / Total_n) * 100, 2),
+            Missing_Age_summary = paste0(Missing_Age_n, " (", Missing_Age_percent, ")")) |>
+  # pivot wider
+  select(Disease, Missing_Age_summary) |>
+  pivot_wider(names_from = Disease, values_from = Missing_Age_summary) |>
+  # Write to xlsx
+  write.xlsx("../tables/missing_age_per_disease.xlsx")
+
+# Count number of F in Sex in n and % of total count per disease
+metadata |>
+  group_by(Disease) |>
+  summarise(
+    n_F     = sum(Sex == "F", na.rm = TRUE),  # number of females
+    total_n = n(),                            # total per disease
+    perc_F  = 100 * n_F / total_n             # % F within each disease
+  ) |>
+  ungroup() |>
+  # Write n_F (perc_F)
+  mutate(summaryF = paste0(n_F, " (", round(perc_F, 2), ")")) |>
+  select(Disease, summaryF) |>
+  pivot_wider(names_from = Disease, values_from = summaryF) |>
+  write.xlsx("../tables/female_sex_per_disease.xlsx")
+
+# Missing sex
+metadata |>
+  group_by(Disease) |>
+  summarise(
+    n_missing_sex = sum(is.na(Sex)),   # number of missing Sex values
+    total_n       = n(),               # total per Disease
+    perc_missing  = 100 * n_missing_sex / total_n
+  ) |>
+  ungroup() |>
+  # write n_missing_sex (perc_missing)
+  mutate(summary = paste0(n_missing_sex, " (", round(perc_missing, 2), ")")) |>
+  select(Disease, summary) |>
+  pivot_wider(names_from = Disease, values_from = summary) |>
+  write.xlsx("../tables/missing_sex_per_disease.xlsx")
+```
+
+```{r}
+data_long_raw |>
+  distinct(Assay, .keep_all = TRUE) |>
+  select(Assay, OlinkID, UniProt, Panel) |>
+  write.xlsx("../tables/assay_information.xlsx")
+```
+
+
+# SessionInfo
+
+```{r}
+sessionInfo()
+```
+
+End of file.

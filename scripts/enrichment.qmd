@@ -76,4 +76,210 @@ library(doParallel) # v.1.0.17
 library(viridis) # v.0.6.5
 library(fmsb) # v.0.7.6
 library(RColorBrewer) # v.1.1-3
+library(org.Hs.eg.db) # v.3.21.0
 ```
+
+
+## Read data
+
+```{r}
+de_results_aml <- read_excel("../tables/DA_proteins_AML_vs_controls.xlsx")
+```
+
+```{r}
+head(de_results_aml)
+dim(de_results_aml)
+```
+
+# Figure 3S: GSEA analysis
+
+```{r}
+# Code to fix the Entrez to Symbol conversion in the enrichment plots
+
+# Create a mapping function for a single string
+convert_ids <- function(id_string) {
+  # Split the string into individual IDs
+  ids <- unlist(strsplit(id_string, "/"))
+  
+  # Map Entrez IDs to Symbols
+  symbols <- mapIds(org.Hs.eg.db, 
+                    keys = ids, 
+                    column = "SYMBOL", 
+                    keytype = "ENTREZID", 
+                    multiVals = "first")
+  
+  # Replace any NAs with the original ID (optional) and paste back with "/"
+  symbols[is.na(symbols)] <- ids[is.na(symbols)]
+  return(paste(symbols, collapse = "/"))
+}
+```
+
+
+## AML vs. Healthy
+
+```{r}
+de_aml_healthy <- de_results_aml |> 
+  dplyr::select(Feature, logFC = logFC_healthy, adj.P.Val = adj.P.Val_healthy, sig = sig_healthy)
+```
+
+```{r}
+set.seed(1234)
+
+enrichment <- hd_gsea(de_aml_healthy, 
+                      database = "GO", 
+                      ontology = "BP",
+                      ranked_by = "logFC",
+                      pval_lim = 0.05)
+
+enrichment_plots <- hd_plot_gsea(enrichment)
+
+enrichment_plots$dotplot
+
+enrichment_plots$dotplot$data
+
+enrichment_data_aml_healthy <- enrichment_plots$dotplot$data %>%
+  mutate(core_enrichment = sapply(core_enrichment, convert_ids))
+```
+
+## AML vs. Pan-cancer
+
+```{r}
+de_aml_pan_cancer <- de_results_aml |> 
+  dplyr::select(Feature, logFC = logFC_cancer, adj.P.Val = adj.P.Val_cancer, sig = sig_cancer)
+```
+
+```{r}
+set.seed(1234)
+
+enrichment <- hd_gsea(de_aml_pan_cancer, 
+                      database = "GO", 
+                      ontology = "BP",
+                      ranked_by = "logFC",
+                      pval_lim = 0.05)
+
+enrichment_plots <- hd_plot_gsea(enrichment)
+
+enrichment_plots$dotplot
+
+enrichment_data_aml_pan_cancer <- enrichment_plots$dotplot$data %>%
+  mutate(core_enrichment = sapply(core_enrichment, convert_ids))
+```
+
+## AML vs. Hematological malignancies
+
+```{r}
+de_aml_hm <- de_results_aml |> 
+  dplyr::select(Feature, logFC = logFC_hm, adj.P.Val = adj.P.Val_hm, sig = sig_hm)
+```
+
+```{r}
+set.seed(1234)
+
+enrichment <- hd_gsea(de_aml_hm, 
+                      database = "GO", 
+                      ontology = "BP",
+                      ranked_by = "logFC",
+                      pval_lim = 0.05)
+
+enrichment_plots <- hd_plot_gsea(enrichment)
+
+enrichment_plots$dotplot
+
+enrichment_data_aml_hm <- enrichment_plots$dotplot$data %>%
+  mutate(core_enrichment = sapply(core_enrichment, convert_ids))
+```
+
+## AML vs. CLL
+
+```{r}
+de_aml_cll <- de_results_aml |> 
+  dplyr::select(Feature, logFC = logFC_cll, adj.P.Val = adj.P.Val_cll, sig = sig_cll)
+```
+
+```{r}
+set.seed(1234)
+
+enrichment <- hd_gsea(de_aml_cll, 
+                      database = "GO", 
+                      ontology = "BP",
+                      ranked_by = "logFC",
+                      pval_lim = 0.05)
+
+enrichment_plots <- hd_plot_gsea(enrichment)
+
+enrichment_plots$dotplot
+
+enrichment_data_aml_cll <- enrichment_plots$dotplot$data %>%
+  mutate(core_enrichment = sapply(core_enrichment, convert_ids))
+```
+
+## AML vs. Lymphoma
+
+```{r}
+de_aml_dbcl <- de_results_aml |> 
+  dplyr::select(Feature, logFC = logFC_lymphoma, adj.P.Val = adj.P.Val_lymphoma, sig = sig_lymphoma)
+```
+
+```{r}
+set.seed(1234)
+
+enrichment <- hd_gsea(de_aml_dbcl, 
+                      database = "GO", 
+                      ontology = "BP",
+                      ranked_by = "logFC",
+                      pval_lim = 0.05)
+
+enrichment_plots <- hd_plot_gsea(enrichment)
+
+enrichment_plots$dotplot
+
+enrichment_data_aml_dlbcl <- enrichment_plots$dotplot$data %>%
+  mutate(core_enrichment = sapply(core_enrichment, convert_ids))
+```
+
+## AML vs. Myeloma
+
+```{r}
+de_aml_myeloma <- de_results_aml |> 
+  dplyr::select(Feature, logFC = logFC_myeloma, adj.P.Val = adj.P.Val_myeloma, sig = sig_myeloma)
+```
+
+```{r}
+set.seed(1234)
+
+enrichment <- hd_gsea(de_aml_myeloma, 
+                      database = "GO", 
+                      ontology = "BP",
+                      ranked_by = "logFC",
+                      pval_lim = 0.05)
+
+enrichment_plots <- hd_plot_gsea(enrichment)
+
+enrichment_plots$dotplot
+
+enrichment_data_aml_myeloma <- enrichment_plots$dotplot$data %>%
+  mutate(core_enrichment = sapply(core_enrichment, convert_ids))
+```
+
+# Write to tables
+
+```{r}
+bind_rows(
+  aml_healthy = enrichment_data_aml_healthy,
+  aml_pan_cancer = enrichment_data_aml_pan_cancer,
+  aml_hm = enrichment_data_aml_hm,
+#  aml_cll = enrichment_data_aml_cll, # no significant terms were found
+  aml_dlbcl = enrichment_data_aml_dlbcl,
+  aml_myeloma = enrichment_data_aml_myeloma,
+  .id = "comparison"
+) |> 
+  write.xlsx("../tables/enrichment_results.xlsx", overwrite = TRUE)
+```
+
+# SessionInfo
+
+```{r}
+sessionInfo()
+```
+
+End of file.

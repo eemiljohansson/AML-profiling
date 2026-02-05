@@ -53,6 +53,7 @@ library(doParallel) # v.1.0.17
 library(viridis) # v.0.6.5
 library(fmsb) # v.0.7.6
 library(RColorBrewer) # v.1.1-3
+library(writexl) # v.1.5.2
 ```
 
 # Source scrips
@@ -69,6 +70,7 @@ source("../scripts/functions/custom_plots.R")
 data_long <-  read_csv("../data/data_long.csv")
 data_wide <- read_csv("../data/data_wide.csv")
 metadata <- read_csv("../data/metadata.csv")
+olink_data_long <- read_csv("../data/olink_data_long.csv")
 ```
 
 ```{r Setting levels, include=FALSE}
