@@ -1,0 +1,329 @@
+---
+title: "ukb_analysis"
+format: html
+---
+
+# Setup
+
+## Load packages
+
+```{r}
+
+```
+
+## Read data
+
+```{r}
+
+```
+
+# Figure 5: Look-up in the UK Biobank
+
+```{r Setup UKB, include=FALSE}
+# Read in raw-data
+data_aml <- read_table("data/UKB/AML_cancer_olink.txt")
+metadata_aml <- read_table("data/UKB/AML_cancer_meta.txt")
+data_healthy <- read_table("data/UKB/UKBB_healthy_olink.txt")
+metadata_healthy <- read_table("data/UKB/UKBB_healthy_metatable.txt")
+```
+
+```{r UKB color palette}
+# Provide levels
+ukb_time_to_disease_levels_1 <- 
+  c("UKB healthy",
+    ">5 years before",
+    "3-5 years before",
+    "Up to 3 years before",
+    "Up to 3 years after",
+    ">3 years after")
+
+ukb_pal_1 <- 
+  c("UKB healthy" = "#2266AC",
+    ">5 years before" = "#4393C3",
+    "3-5 years before" = "#91C4DE",
+    "Up to 3 years before" = "#D1E5F0",
+    "Up to 3 years after" = "#FDDAC7",
+    ">3 years after" = "#F3A482")
+```
+
+## Data wrangling
+
+```{r Data wrangling UKB Olink data}
+# Creating a Protein_ID to Assay converter
+data_healthy |>
+  mutate(meaning = str_replace(meaning, ";.*$", "")) |>
+  rename(Protein_ID = "protein_id",
+         Assay = "meaning") |>
+  select(Assay, Protein_ID) |>
+  mutate(Protein_ID = as.character(Protein_ID)) |>
+  distinct(Assay, .keep_all = T) |>
+  write.csv("UKB_Protein_ID_to_Assay.csv")
+
+ukb_assay_converter <- read_csv("UKB_Protein_ID_to_Assay.csv") |>
+  select(Assay, Protein_ID)
+```
+
+```{r Data wrangling UKB metadata}
+# Cleaning metadata
+metadata_ukb <- bind_rows(metadata_aml, metadata_healthy |>
+                            rename(Age = "Age_sample_collect")) |>
+  rename(DAid = "eid",
+         Disease = "Cancer_name") |>
+  mutate(Sex = case_when(Sex == 1 ~ "Male",
+                         Sex == 0 ~  "Female"),
+         Disease = case_when(Disease == "AML_cancer" ~ "AML",
+                             T ~ "Healthy"),
+         Time_to_diagnosis = Age - Cancer_age_diagnosis,
+         DAid = as.character(DAid))
+```
+
+```{r Preparing UKB data}
+# Cleaning UKB Olink data
+data_ukb_long <- bind_rows(
+  # Healthy data
+  data_healthy |>
+  mutate(meaning = str_replace(meaning, ";.*$", "")) |>
+  rename(DAid = "eid",
+         Protein_ID = "protein_id",
+         NPX = "result",
+         Assay = "meaning") |>
+  select(DAid, Assay, NPX, Protein_ID) |>
+  mutate(Protein_ID = as.character(Protein_ID),
+         DAid = as.character(DAid),
+         Disease = "Healthy"),
+  
+  # AML data
+  data_aml |>
+  rename(DAid = "eid",
+         Protein_ID = "protein_id",
+         NPX = "result") |>
+  right_join(ukb_assay_converter, by = "Protein_ID") |>
+  select(DAid, Assay, NPX, Protein_ID) |>
+  mutate(Disease = "AML",
+         DAid = as.character(DAid),
+         Protein_ID = as.character(Protein_ID))
+)
+
+# Identify duplicates
+duplicates <- data_ukb_long %>%
+  group_by(DAid, Assay, Disease) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  filter(n > 1L) |>
+  distinct(DAid, .keep_all = T)
+
+# Remove any samples with a varying NPX value
+# Keep only one of those remaining (possible error)
+duplicates_id <- data_ukb_long |>
+  filter(DAid %in% duplicates$DAid) |>
+  filter(Assay == "AARSD1") |>
+  distinct(DAid, .keep_all = T) |>
+  filter(DAid != "1607627" & DAid != "3217072" & DAid != "5883276")
+  
+# Removing 16 samples (1 AML & 15 healthy)
+# Keeping only 1 copy of each DAid (3 duplicates)
+data_ukb_long <- data_ukb_long |>
+  filter(!(DAid %in% duplicates_id$DAid)) |>
+  distinct(DAid, Assay, .keep_all = T) 
+```
+
+## UKB cohort description
+
+### A: Cumalative number of AML patients
+
+```{r Cumulatative count of UKB AML patients, fig.width=10, fig.height=7}
+# Custom function to handle conditional rounding
+conditional_round <- function(x) {
+  if_else(x < 0, floor(x), floor(x))
+}
+
+# Prepare the data with adjusted rounding
+aml_data <- metadata_ukb %>%
+  filter(Disease == "AML") %>%
+  mutate(Adjusted_Years = conditional_round(Time_to_diagnosis)) %>%
+  group_by(Adjusted_Years) %>%
+  summarise(count = n_distinct(DAid)) %>%
+  arrange(Adjusted_Years) %>%
+  mutate(cumulative_count = cumsum(count))  # Calculate cumulative count for the trendline
+
+# Determine the range of years to set proper scaling for the gradient
+year_range <- range(aml_data$Adjusted_Years)
+
+# Plot using ggplot
+ggplot(aml_data) +
+  geom_col(aes(x = as.factor(Adjusted_Years), y = count, fill = Adjusted_Years)) +
+  geom_line(aes(x = as.factor(Adjusted_Years), y = cumulative_count, group = 1), 
+            color = "red", size = 1) +
+  geom_point(aes(x = as.factor(Adjusted_Years), y = cumulative_count), 
+             color = "red", size = 2) +
+  scale_fill_gradient2(low = "blue", mid = "lightgray", high = "red", 
+                       midpoint = 0, limits = c(year_range[1], year_range[2]), 
+                       oob = scales::rescale_none, 
+                       name = "Years to/from Diagnosis") +  # Changed legend title
+  scale_x_discrete(name = "Years to/from Diagnosis", 
+                   breaks = aml_data$Adjusted_Years,
+                   labels = aml_data$Adjusted_Years) +
+  labs(title = "Number of AML patients", subtitle = "UKB data", 
+       y = "Number of future/past patients", x = "Years before/after Diagnosis") +
+  theme_light() +
+  theme(axis.text.x = element_text(angle = 0, hjust = 1)) +
+  # add the legend on the top
+  theme(legend.position = "top")
+
+ggsave("results/ukb/ukb_AML_trend.pdf", width = 10, height = 7)
+```
+
+### B: Age
+
+```{r UKB age, fig.width=5, fig.height=10}
+# Age distribution
+ukb_age <- metadata_ukb %>%
+  filter(Age != 0) %>%
+  ggplot(aes(x = Age, y = Disease, color = Disease, fill = Disease)) +
+  geom_density_ridges(color = "black", scale = 1) +
+  labs(x = "Age", y = "Cohort") +
+  theme_minimal() +
+  theme(legend.position = "top")
+
+ukb_age
+
+ggsave("results/ukb/ukb_age.pdf", width = 10, height = 7)
+```
+
+```{r}
+# Age range per UKB cohort
+metadata_ukb %>%
+  group_by(Disease) %>%
+  summarise(min_age = min(Age), max_age = max(Age), .groups = "drop")
+```
+
+```{r}
+# Average age per UKB cohort
+metadata_ukb %>%
+  group_by(Disease) %>%
+  summarise(mean_age = mean(Age), .groups = "drop")
+```
+
+
+### C: Sex
+
+```{r UKB sex, fig.width=5, fig.height=10}
+# Sex distribution
+ukb_sex <- metadata_ukb |>
+  filter(!is.na(Sex)) |>
+  group_by(Disease, Sex) |>
+  summarise(Count = n()) |>
+  ggplot(aes(x = Disease, y = Count, fill = Sex)) +
+  geom_col(position = "stack", color = "black", width = 0.7) +
+  labs(x = "Cohort", y = "Number of samples") +
+  theme_minimal() +
+  scale_fill_manual(values = c("Male" = "#9BCBEF", "Female" = "#EF9BD6")) +
+  coord_flip() +
+  theme(legend.position = "top")
+
+ukb_sex
+
+ggsave("results/ukb/ukb_sex.pdf", width = 10, height = 7)
+```
+
+```{r}
+# Number of males and females per ukb cohort
+metadata_ukb %>%
+  group_by(Disease, Sex) %>%
+  summarise(n = n(), .groups = "drop")
+```
+
+
+```{r Combined age and sex in the UKB, fig.width=10, fig.height=10}
+ukb_age + ukb_sex
+
+ggsave("results/ukb/ukb_age_sex.pdf", width = 10, height = 7)
+```
+
+### D & E: Example boxplots
+
+```{r Preparing example boxplot data ukb}
+# Dividing into time to diagnosis groups
+ukb_data <- data_ukb_long %>%
+  right_join(metadata_ukb, by = c("DAid", "Disease")) %>%
+  mutate(Time_to_disease = case_when(
+    Time_to_diagnosis <= -5 ~ ">5 years before",
+    Time_to_diagnosis > -5 & Time_to_diagnosis <= -3 ~ "3-5 years before",
+    Time_to_diagnosis > -3 & Time_to_diagnosis <= 0 ~ "Up to 3 years before",
+    Time_to_diagnosis > 0 & Time_to_diagnosis <= 3 ~ "Up to 3 years after",
+    Time_to_diagnosis > 3 ~ ">3 years after",
+    TRUE ~ "UKB healthy"
+  ))
+```
+
+```{r UKB look up DE, fig.width=7, fig.height=10}
+# Filter the data to include only the desired assays
+ukb_lookup_de <- ukb_data %>%
+  filter(Assay %in% c("FLT3", "FLT3LG", "EPO", "PGLYRP1")) %>%
+  mutate(Time_to_disease = factor(Time_to_disease, levels = ukb_time_to_disease_levels_1)) %>%
+  ggplot(aes(x = Time_to_disease, y = NPX, fill = Time_to_disease)) +
+    geom_violin(trim = FALSE) +
+    stat_summary(fun = "mean",
+               geom = "crossbar",
+               color = "black",
+               width = 0.3,
+               size = 0.4,
+               show.legend = F) +
+    labs(title = "Protein Levels Across Different Time to Diagnosis",
+         x = "Time to diagnosis",
+         y = "NPX",
+         fill = "Time to diagnosis") +
+    scale_fill_manual(values = ukb_pal_1) +
+    facet_wrap(~ Assay, scales = "free_y", ncol = 1) +  # Facet by Assay with free y scales
+    theme_light() +
+    theme(strip.text.x = element_text(size = 12),
+          axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1))
+
+ukb_lookup_de
+
+# Save the plot
+ggsave("results/ukb/UKB_violin_plot_mean_DE.pdf", height = 10, width = 7)
+```
+
+```{r UKB samples per group}
+# How many samples are there in each group per assay ("FLT3", "FLT3LG", "EPO", "PGLYRP1", "CDH17", "FCGR3B", "LCN2", "TNFRSF10C")
+ukb_data %>%
+  filter(Assay %in% c("FLT3", "FLT3LG", "EPO", "PGLYRP1", "CDH17", "FCGR3B", "LCN2", "TNFRSF10C")) %>%
+  group_by(Assay, Time_to_disease) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  arrange(Assay, Time_to_disease)
+```
+
+```{r UKB look up ML, fig.width=7, fig.height=10}
+# Filter the data to include only the desired assays
+ukb_lookup_ml <- ukb_data %>%
+  filter(Assay %in% c("CDH17", "FCGR3B", "LCN2", "TNFRSF10C")) %>%
+  mutate(Time_to_disease = factor(Time_to_disease, levels = ukb_time_to_disease_levels_1)) %>%
+  ggplot(aes(x = Time_to_disease, y = NPX, fill = Time_to_disease)) +
+    geom_violin(trim = FALSE) +
+    stat_summary(fun = "mean",
+               geom = "crossbar",
+               color = "black",
+               width = 0.3,
+               size = 0.4,
+               show.legend = F) +
+    labs(title = "Protein Levels Across Different Time to Diagnosis",
+         x = "Time to diagnosis",
+         y = "NPX",
+         fill = "Time to diagnosis") +
+    scale_fill_manual(values = ukb_pal_1) +
+    facet_wrap(~ Assay, scales = "free_y", ncol = 1) +  # Facet by Assay with free y scales
+    theme_light() +
+    theme(strip.text.x = element_text(size = 12),
+          axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1))
+
+ukb_lookup_ml
+
+# Save the plot
+ggsave("results/ukb/UKB_violin_plot_mean_ML.pdf", height = 10, width = 7)
+```
+
+```{r ukb lookup, fig.width=14, fig.height=10}
+ukb_lookup_de + guides(color = F, fill = F) + ukb_lookup_ml
+
+ggsave("results/ukb/UKB_violin_plot_mean_DE_ML.pdf", height = 10, width = 14)
+```

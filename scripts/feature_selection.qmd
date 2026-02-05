@@ -1,0 +1,1405 @@
+---
+title: "feature_selection"
+format: html
+---
+
+# Set up
+
+## Load packages
+
+These packages are used in the analysis:
+
+```{r Loading packages, warning=FALSE}
+# Loading packages
+library(tidyverse) # v.2.0.0
+library(tidymodels) # v.1.1.1
+library(embed) # v.1.1.3
+library(umap) # v0.2.10.0
+library(ggrepel) # v.0.9.4
+library(readxl) # v.1.4.3
+library(openxlsx) # v.4.2.7
+library(HDAnalyzeR) # v.1.0.0
+library(ggridges) # v.0.5.6
+library(patchwork) # v.1.3.0
+library(ComplexUpset) # v.1.3.3
+library(MatchIt) # v.4.6.0
+library(caret) # v.6.0-94
+library(doParallel) # v.1.0.17
+library(vip) # v.0.4.1
+library(viridis) # v.0.6.5
+library(fmsb) # v.0.7.6
+library(RColorBrewer) # v.1.1-3
+```
+
+## Specifying function
+
+```{r}
+select <- dplyr::select
+filter <- dplyr::filter
+rename <- dplyr::rename
+mutate <- dplyr::mutate
+```
+
+## Scripts
+
+```{r Loading scripts}
+source("../scripts/functions/functions_disease_analyses.R")
+source("../scripts/functions/custom_plots.R")
+```
+
+## Theme
+
+```{r Setting levels, include=FALSE}
+# Setting levels
+levels_pan_cancer <- c("AML", "CLL", "DLBCL", "Myeloma", "Colorectal", "Lung", "Glioma", "Breast", "Cervical", "Endometrial", "Ovarian", "Prostate", "HCC", "Pancreatic")
+levels_all <- c(levels_pan_cancer, "Healthy")
+```
+
+```{r Setting palettes, include=FALSE}
+# Defining sex-specific colors
+pal_sex <- c("#30D5C8", "lightpink")
+pal_sex <- setNames(pal_sex, c("M", "F"))
+  
+# Defining disease-specific colors
+pal_all <- c("#8D9FCA", "#E8A29A", "#CDB18A", 
+                 "#2271B5", "#B89B74", "#9E0142", 
+                 "#B195AE", "#FFD321", "#D1CBE5", 
+                 "#ADC74F", "#6D6D6D", "#66C2A5", 
+                 "#603479", "#96C08E", "#E7662B")
+pal_all <- setNames(pal_all, c("AML", "Breast", "Healthy", 
+                                      "CLL", "Colorectal", "Cervical", 
+                                      "Endometrial", "Glioma", "HCC", 
+                                      "Lung", "DLBCL", "Myeloma", 
+                                      "Ovarian", "Pancreatic", "Prostate"))
+
+
+# Defining hematological cancer-specific colors
+pal_hm <- c("#8D9FCA", "grey", "grey",
+                   "#2271B5", "grey", "grey",
+                   "grey", "grey", "grey",
+                   "grey", "#6D6D6D", "#66C2A5", 
+                   "grey", "grey", "grey")
+pal_hm <- setNames(pal_hm, c("AML", "Breast", "Healthy", 
+                                           "CLL", "Colorectal", "Cervical", 
+                                           "Endometrial", "Glioma", "HCC", 
+                                           "Lung", "DLBCL", "Myeloma", 
+                                           "Ovarian", "Pancreatic", "Prostate"))
+
+# Defining AML-healthy specific colors
+pal_aml_healthy <- c("#CDB18A","#8D9FCA", "grey", 
+                   "grey", "grey", "grey",
+                   "grey", "grey", "grey",
+                   "grey", "grey", "grey", 
+                   "grey", "grey", "grey")
+pal_aml_healthy <- setNames(pal_aml_healthy, c("Healthy", "AML", "CLL", 
+                                           "DLBCL", "Myeloma", "Breast", 
+                                           "Cervical", "Colorectal",
+                                           "Endometrial", "Glioma", "HCC", "Lung", 
+                                           "Ovarian", "Pancreatic", "Prostate"))
+  
+# Define colors for differential expression
+pal_de <- c("#D3D3D3", "#FF7176", "#92C9DA")
+pal_de <- setNames(pal_de, c("not significant", "significant up", "significant down"))
+```
+
+## Read data
+
+```{r Loading data, warning=FALSE}
+# Read data
+data_long <- read_csv("../data/data_long.csv")
+data_wide <- read_csv("../data/data_wide.csv")
+metadata <- read.csv("../data/metadata.csv")
+```
+
+# Figure 3: Feature selection by LASSO
+
+## A: Feature selection
+
+### Healthy controls
+
+```{r Balancing Healthy controls, fig.width=10, fig.height=7}
+set.seed(123)
+
+case <- "AML"
+control <- "Healthy"
+
+# Filter for cases and controls
+balanced_data <- data_wide %>% 
+  right_join(metadata, by = "DAid") %>% 
+  filter(Disease %in% c(case, control)) %>% 
+  filter(!is.na(Sex)) %>% 
+  mutate(Disease_Sex = interaction(Disease, Sex)) %>% # Create stratification column here to use later
+  group_by(Sex) %>% 
+  group_modify(~ {
+    cases <- filter(.x, Disease == case)
+    controls <- filter(.x, Disease %in% control)
+    
+    # Calculate maximum controls based on cases
+    num_cases <- nrow(cases)
+    max_controls <- min(nrow(controls), num_cases * 4) # Correcting to ensure 1:4 ratio is maintained
+    
+    if (nrow(controls) > max_controls) {
+      sampled_controls <- slice_sample(controls, n = max_controls)
+    } else {
+      sampled_controls <- controls
+    }
+    
+    # Combine cases and sampled controls
+    bind_rows(cases, sampled_controls)
+  }) %>% 
+  ungroup()
+
+### Verifying the result ###
+
+# Check Male to Female ratio per disease
+balanced_data |> 
+  group_by(Disease, Sex) |>
+  summarise(n = n(), .groups = "drop")
+
+balanced_data |> 
+  mutate(Sex = case_when(Sex == "M" ~ "Male",
+                         Sex == "F" ~ "Female",
+                         T ~ Sex)) |>
+  group_by(Disease, Sex) |>
+  summarise(n = n(), .groups = "drop") |>
+  # Summarize the ratio males to females per disease
+  pivot_wider(names_from = Sex, values_from = n, values_fill = list(n = 0)) |>
+  mutate(Ratio_M_to_F = Male / Female)
+
+# Visualize Age and sex for Balanced_data
+balanced_data |>
+  filter(Age != 0) |>
+  ggplot(aes(x = Age, y = factor(Disease, levels = rev(levels_all)), fill = Disease)) +
+  geom_boxplot(color = "black") +
+  labs(x = "Age", y = "Cohort") +
+  scale_fill_manual(values = pal_all) +
+  theme_light() +
+  guides(fill = FALSE)
+
+balanced_data |>
+  filter(!is.na(Sex)) |>
+  group_by(Disease, Sex) |>
+  summarise(Count = n()) |> 
+  ggplot(aes(x = factor(Disease, levels = rev(levels_all)), y = Count, fill = Sex)) +
+  geom_col(position = "stack", color = "black", width = 0.7) +
+  labs(x = "Cancer", y = "Number of samples") +
+  theme_light() +
+  scale_fill_manual(values = pal_sex) +
+  coord_flip() +
+  theme(legend.position = "top")
+```
+
+Balance training and test sets based on sex
+
+```{r Splitting AML and healthy controls based on disease and sex}
+set.seed(123)
+
+# Assuming balanced_data is already prepared and contains the 'Disease' and 'Sex' columns
+# First, we'll separate the data by sex
+male_data <- balanced_data %>% filter(Sex == "M")
+female_data <- balanced_data %>% filter(Sex == "F")
+
+# Function to perform stratified splitting
+split_data <- function(data, prop = 0.7, strata_column = "Disease") {
+  # Create a stratified split
+  split <- initial_split(data, prop = prop, strata = !!rlang::sym(strata_column))
+  
+  # Extract training and test data
+  train_set <- training(split)
+  test_set <- testing(split)
+  
+  return(list(train = train_set, test = test_set))
+}
+
+# Apply the function to both male and female datasets
+male_split <- split_data(male_data)
+female_split <- split_data(female_data)
+
+# Combine male and female training and test sets
+train_data <- bind_rows(male_split$train, female_split$train)
+test_data <- bind_rows(male_split$test, female_split$test)
+
+# Optionally check the composition of the resulting datasets
+# Summarize the training set
+train_summary <- train_data %>% 
+  group_by(Disease, Sex) %>% 
+  summarise(Count = n(), .groups = 'drop')
+
+# Summarize the test set
+test_summary <- test_data %>% 
+  group_by(Disease, Sex) %>% 
+  summarise(Count = n(), .groups = 'drop')
+
+# Print summaries
+print("Training Set Summary:")
+print(train_summary)
+print("Test Set Summary:")
+print(test_summary)
+```
+
+```{r Save AML split}
+aml_train <- train_data |> filter(Disease == "AML")
+aml_test <- test_data |> filter(Disease == "AML")
+```
+
+```{r Verifying results with healthy controls}
+### Verifying the result ###
+train_data |> mutate(Split = "Train") |> bind_rows(test_data |> mutate(Split = "Test")) |>
+  group_by(Disease, Split) |>
+  summarise(n = n(), .groups = "drop")
+
+# Check Male to Female ratio per disease
+train_data |> mutate(Split = "Train") |> bind_rows(test_data |> mutate(Split = "Test")) |> mutate(Disease_Split = interaction(Disease, Split)) |>
+  mutate(Sex = case_when(Sex == "M" ~ "Male",
+                         Sex == "F" ~ "Female",
+                         T ~ Sex)) |>
+  group_by(Disease_Split, Sex) |>
+  summarise(n = n(), .groups = "drop") |>
+  # Summarize the ratio males to females per disease
+  pivot_wider(names_from = Sex, values_from = n, values_fill = list(n = 0)) |>
+  mutate(Ratio_M_to_F = Male / Female)
+
+# Visualize Age and sex for Balanced_data
+train_data |> mutate(Split = "Train") |> bind_rows(test_data |> mutate(Split = "Test")) |> mutate(Disease_Split = interaction(Disease, Split)) |>
+  filter(Age != 0) |>
+  ggplot(aes(x = Age, y = Disease_Split, fill = Disease_Split)) +
+  geom_boxplot(color = "black") +
+  labs(x = "Age", y = "Cohort") +
+  theme_light() +
+  guides(fill = FALSE)
+
+train_data |> mutate(Split = "Train") |> bind_rows(test_data |> mutate(Split = "Test")) |> mutate(Disease_Split = interaction(Disease, Split)) |>
+  filter(!is.na(Sex)) |>
+  group_by(Disease_Split, Sex) |>
+  summarise(Count = n()) |> 
+  ggplot(aes(x = Disease_Split, y = Count, fill = Sex)) +
+  geom_col(position = "stack", color = "black", width = 0.7) +
+  labs(x = "Cancer", y = "Number of samples") +
+  theme_light() +
+  coord_flip() +
+  theme(legend.position = "top")
+```
+
+```{r}
+# Remove the temporary Disease_Sex column if no longer needed
+train_data <- train_data |> select(DAid, Disease, everything(), -Sex, -Disease_Sex, -Age)
+test_data <- test_data |> select(DAid, Disease, everything(), -Sex, -Disease_Sex, -Age)
+
+split_obj_balanced_aml_healthy <- list(train_data, test_data)
+names(split_obj_balanced_aml_healthy) <- c("train_data", "test_data")
+```
+
+```{r}
+lasso_res_aml_healthy <- hd_model_rreg(split_obj_balanced_aml_healthy, case = "AML", control = c("Healthy"), balance_groups = FALSE, grid_size = 30, cor_threshold = 0.9, cv_sets = 5, mixture = 1, verbose = FALSE, seed = 123)
+```
+
+```{r Feature selection AML vs healthy, fig.width=10, fig.height=7}
+features_aml_healthy <-  lasso_res_aml_healthy$features |>
+  # If the Sign is NEG, then Importance should be negative
+  mutate(Importance = ifelse(Sign == "NEG", -Importance, Importance)) |>
+  filter(Importance != 0) |>
+  ggplot(aes(x = reorder(Feature, abs(Importance)), y = Importance, fill = Importance)) +
+  geom_bar(stat = "identity") +
+  scale_fill_viridis(begin = 1, end = 0, option = "plasma") +
+  labs(x = "Protein", y = "Model importance") +
+  theme_light() +
+  coord_flip() +
+  guides(fill = F)
+
+features_aml_healthy
+```
+
+### Pan-cancer controls
+
+Proposed solution: check number of males and females in the training and test set. Match that number randomly for the training set, take the remainin samples for the test set. This should work for the pan-cancer controls. If the cohort is all female or all male, then it should pool the number of samples counting for both males and females in the case class.
+
+```{r Balancing cancer controls, fig.width=10, fig.height=7}
+# Set parameters
+set.seed(123)
+case <- "AML"
+control <- c("CLL", "DLBCL", "Myeloma", "Colorectal", "Lung", "Glioma", "Breast", "Cervical", "Endometrial", "Ovarian", "Prostate", "HCC", "Pancreatic")
+ratio <- 4
+
+# Calculate total control count only once for efficiency
+total_control_count <- length(control)
+
+# Mixed cohorts
+control_data_mixed <- data_wide %>%
+  right_join(metadata, by = "DAid") %>%
+  filter(Disease %in% c("CLL", "DLBCL", "Myeloma", "Colorectal", "Lung", "Glioma", "HCC", "Pancreatic")) %>%
+  filter(!is.na(Sex))
+
+# Male cohorts
+control_data_male <- data_wide %>%
+  right_join(metadata, by = "DAid") %>%
+  filter(Disease %in% c("Prostate")) %>%
+  filter(!is.na(Sex))
+
+# Female cohorts
+control_data_female <- data_wide %>%
+  right_join(metadata, by = "DAid") %>%
+  filter(Disease %in% c("Breast", "Cervical", "Endometrial", "Ovarian")) %>%
+  filter(!is.na(Sex))
+
+# Determine the number of samples to pool into the training and test set dynamically
+samples_pooled_train_m <- round((nrow(aml_train |> filter(Sex == "M")) * ratio) / total_control_count)
+samples_pooled_train_f <- round((nrow(aml_train |> filter(Sex == "F")) * ratio) / total_control_count)
+samples_pooled_test_m <- round((nrow(aml_test |> filter(Sex == "M")) * ratio) / total_control_count)
+samples_pooled_test_f <- round((nrow(aml_test |> filter(Sex == "F")) * ratio) / total_control_count)
+
+### Mixed ###
+# Sample for training and test set, ensuring you're not sampling from already selected data
+control_train_data <- control_data_mixed %>%
+  group_by(Disease, Sex) %>%
+  group_modify(~slice_sample(.x, n = if (.y$Sex == "M") samples_pooled_train_m else samples_pooled_train_f)) %>%
+  ungroup()
+
+control_test_data <- control_data_mixed %>%
+  anti_join(control_train_data, by = "DAid") %>%
+  group_by(Disease, Sex) %>%
+  group_modify(~slice_sample(.x, n = if (.y$Sex == "M") samples_pooled_test_m else samples_pooled_test_f)) %>%
+  ungroup()
+
+### Male and Female Specific ###
+
+# Similar process for male and female cohorts, with the combined total count for training and testing
+combined_samples_train <- samples_pooled_train_m + samples_pooled_train_f
+combined_samples_test <- samples_pooled_test_m + samples_pooled_test_f
+
+control_train_data_male <- control_data_male %>%
+  group_by(Disease) %>%
+  group_modify(~slice_sample(.x, n = combined_samples_train)) %>%
+  ungroup()
+
+control_test_data_male <- control_data_male %>%
+  anti_join(control_train_data_male, by = "DAid") %>%
+  group_by(Disease) %>%
+  group_modify(~slice_sample(.x, n = combined_samples_test)) %>%
+  ungroup()
+
+control_train_data_female <- control_data_female %>%
+  group_by(Disease) %>%
+  group_modify(~slice_sample(.x, n = combined_samples_train)) %>%
+  ungroup()
+
+control_test_data_female <- control_data_female %>%
+  anti_join(control_train_data_female, by = "DAid") %>%
+  group_by(Disease) %>%
+  group_modify(~slice_sample(.x, n = combined_samples_test)) %>%
+  ungroup()
+
+# Binding all together if needed
+control_train_data <- bind_rows(control_train_data, control_train_data_male, control_train_data_female)
+control_test_data <- bind_rows(control_test_data, control_test_data_male, control_test_data_female)
+```
+
+Balance training and test sets based on sex
+
+```{r Splitting AML and healthy controls based on disease and sex}
+# Combining balanced data
+train_data <- bind_rows(aml_train, control_train_data)
+test_data <- bind_rows(aml_test, control_test_data)
+
+# Optionally check the composition of the resulting datasets
+# Summarize the training set
+train_summary <- train_data %>% 
+  group_by(Disease, Sex) %>% 
+  summarise(Count = n(), .groups = 'drop')
+
+# Summarize the test set
+test_summary <- test_data %>% 
+  group_by(Disease, Sex) %>% 
+  summarise(Count = n(), .groups = 'drop')
+
+# Print summaries
+print("Training Set Summary:")
+print(train_summary)
+print("Test Set Summary:")
+print(test_summary)
+```
+
+```{r Verifying results with healthy controls}
+### Verifying the result ###
+train_data |> mutate(Split = "Train") |> bind_rows(test_data |> mutate(Split = "Test")) |>
+  group_by(Disease, Split) |>
+  summarise(n = n(), .groups = "drop")
+
+# Check Male to Female ratio per disease
+train_data |> mutate(Split = "Train") |> bind_rows(test_data |> mutate(Split = "Test")) |> mutate(Disease_Split = interaction(Disease, Split)) |>
+  mutate(Sex = case_when(Sex == "M" ~ "Male",
+                         Sex == "F" ~ "Female",
+                         T ~ Sex)) |>
+  group_by(Disease_Split, Sex) |>
+  summarise(n = n(), .groups = "drop") |>
+  # Summarize the ratio males to females per disease
+  pivot_wider(names_from = Sex, values_from = n, values_fill = list(n = 0)) |>
+  mutate(Ratio_M_to_F = Male / Female)
+
+# Visualize Age and sex for Balanced_data
+train_data |> mutate(Split = "Train") |> bind_rows(test_data |> mutate(Split = "Test")) |> mutate(Disease_Split = interaction(Disease, Split)) |>
+  filter(Age != 0) |>
+  ggplot(aes(x = Age, y = Disease_Split, fill = Disease_Split)) +
+  geom_boxplot(color = "black") +
+  labs(x = "Age", y = "Cohort") +
+  theme_light() +
+  guides(fill = FALSE)
+
+train_data |> mutate(Split = "Train") |> bind_rows(test_data |> mutate(Split = "Test")) |> mutate(Disease_Split = interaction(Disease, Split)) |>
+  filter(!is.na(Sex)) |>
+  group_by(Disease_Split, Sex) |>
+  summarise(Count = n()) |> 
+  ggplot(aes(x = Disease_Split, y = Count, fill = Sex)) +
+  geom_col(position = "stack", color = "black", width = 0.7) +
+  labs(x = "Cancer", y = "Number of samples") +
+  theme_light() +
+  coord_flip() +
+  theme(legend.position = "top")
+```
+
+```{r}
+split_obj_balanced_aml_cancer <- list(train_data |> select(-Sex, -Age, -Disease_Sex), test_data |> select(-Sex, -Age, -Disease_Sex))
+names(split_obj_balanced_aml_cancer) <- c("train_data", "test_data")
+```
+
+```{r}
+lasso_res_aml_cancer <- hd_model_rreg(split_obj_balanced_aml_cancer, case = "AML", control = c("CLL", "DLBCL", "Myeloma", "Colorectal", "Lung", "Glioma", "Breast", "Cervical", "Endometrial", "Ovarian", "Prostate", "HCC", "Pancreatic"), balance_groups = FALSE, grid_size = 30, cor_threshold = 0.9, cv_sets = 5, mixture = 1, verbose = FALSE, seed = 123)
+```
+
+```{r Feature selection AML vs pan-cancer, fig.width=10, fig.height=7}
+features_aml_cancer <-  lasso_res_aml_cancer$features |>
+  mutate(Importance = ifelse(Sign == "NEG", -Importance, Importance)) |>
+  filter(Importance != 0) |>
+  ggplot(aes(x = reorder(Feature, abs(Importance)), y = Importance, fill = Importance)) +
+  geom_bar(stat = "identity") +
+  scale_fill_viridis(begin = 1, end = 0, option = "plasma") +
+  labs(x = "Protein", y = "Model importance") +
+  theme_light() +
+  coord_flip() +
+  guides(fill = F)
+
+features_aml_cancer
+```
+
+### Hematological malignancies
+
+```{r Balancing cancer controls, fig.width=10, fig.height=7}
+# Set parameters
+set.seed(123)
+case <- "AML"
+control <- c("CLL", "DLBCL", "Myeloma")
+m_f_ratio <- 1.25
+train_ratio <- 0.65
+
+# Initialize lists to store training and test data for each control group
+training_list <- list()
+test_list <- list()
+
+# Loop through each control group and perform the splitting
+for (disease in control) {
+  set.seed(123)  # Ensures reproducibility
+  
+  # Filter for the current disease
+  disease_data <- control_data_mixed %>%
+    filter(Disease == disease)
+  
+  # Separate males and females
+  males <- disease_data %>% filter(Sex == "M")
+  females <- disease_data %>% filter(Sex == "F")
+  
+  train_male <- males |> slice_sample(n = round(nrow(males)*train_ratio))
+  train_female <- females |> slice_sample(n = round(nrow(females)*train_ratio))
+  
+  test_male <- males |> anti_join(train_male)
+  test_female <- females |> anti_join(train_female)
+  
+  # Combine the balanced dataset
+  balanced_train <- bind_rows(train_male, train_female)
+  balanced_test <- bind_rows(test_male, test_female)
+  
+  # Store the results in the lists
+  training_list[[disease]] <- balanced_train
+  test_list[[disease]] <- balanced_test
+}
+
+# Combine all control training and test data
+control_train_data <- bind_rows(training_list)
+control_test_data <- bind_rows(test_list)
+
+# Summarize the final datasets
+cat("Control Training Data Summary:\n")
+print(control_train_data %>% group_by(Disease, Sex) %>% summarize(n = n()))
+
+cat("Control Test Data Summary:\n")
+print(control_test_data %>% group_by(Disease, Sex) %>% summarize(n = n()))
+```
+
+Balance training and test sets based on sex
+
+```{r Splitting AML and healthy controls based on disease and sex}
+# Combining balanced data
+train_data <- bind_rows(aml_train, control_train_data)
+test_data <- bind_rows(aml_test, control_test_data)
+
+# Optionally check the composition of the resulting datasets
+# Summarize the training set
+train_summary <- train_data %>% 
+  group_by(Disease, Sex) %>% 
+  summarise(Count = n(), .groups = 'drop')
+
+# Summarize the test set
+test_summary <- test_data %>% 
+  group_by(Disease, Sex) %>% 
+  summarise(Count = n(), .groups = 'drop')
+
+# Print summaries
+print("Training Set Summary:")
+print(train_summary)
+print("Test Set Summary:")
+print(test_summary)
+```
+
+```{r Verifying results with healthy controls}
+### Verifying the result ###
+train_data |> mutate(Split = "Train") |> bind_rows(test_data |> mutate(Split = "Test")) |>
+  group_by(Disease, Split) |>
+  summarise(n = n(), .groups = "drop")
+
+# Check Male to Female ratio per disease
+train_data |> mutate(Split = "Train") |> bind_rows(test_data |> mutate(Split = "Test")) |> mutate(Disease_Split = interaction(Disease, Split)) |>
+  mutate(Sex = case_when(Sex == "M" ~ "Male",
+                         Sex == "F" ~ "Female",
+                         T ~ Sex)) |>
+  group_by(Disease_Split, Sex) |>
+  summarise(n = n(), .groups = "drop") |>
+  # Summarize the ratio males to females per disease
+  pivot_wider(names_from = Sex, values_from = n, values_fill = list(n = 0)) |>
+  mutate(Ratio_M_to_F = Male / Female)
+
+# Visualize Age and sex for Balanced_data
+train_data |> mutate(Split = "Train") |> bind_rows(test_data |> mutate(Split = "Test")) |> mutate(Disease_Split = interaction(Disease, Split)) |>
+  filter(Age != 0) |>
+  ggplot(aes(x = Age, y = Disease_Split, fill = Disease_Split)) +
+  geom_boxplot(color = "black") +
+  labs(x = "Age", y = "Cohort") +
+  theme_light() +
+  guides(fill = FALSE)
+
+train_data |> mutate(Split = "Train") |> bind_rows(test_data |> mutate(Split = "Test")) |> mutate(Disease_Split = interaction(Disease, Split)) |>
+  filter(!is.na(Sex)) |>
+  group_by(Disease_Split, Sex) |>
+  summarise(Count = n()) |> 
+  ggplot(aes(x = Disease_Split, y = Count, fill = Sex)) +
+  geom_col(position = "stack", color = "black", width = 0.7) +
+  labs(x = "Cancer", y = "Number of samples") +
+  theme_light() +
+  coord_flip() +
+  theme(legend.position = "top")
+```
+
+```{r}
+split_obj_balanced_aml_hm <- list(train_data |> select(-Sex, -Age, -Disease_Sex), test_data |> select(-Sex, -Age, -Disease_Sex))
+names(split_obj_balanced_aml_hm) <- c("train_data", "test_data")
+```
+
+```{r}
+lasso_res_aml_hm <- hd_model_rreg(split_obj_balanced_aml_hm, case = "AML", control = c("CLL", "DLBCL", "Myeloma"), balance_groups = FALSE, grid_size = 30, cor_threshold = 0.9, cv_sets = 5, mixture = 1, verbose = FALSE, seed = 123)
+```
+
+```{r Feature selection AML vs hm, fig.width=10, fig.height=7}
+features_aml_hm <-  lasso_res_aml_hm$features |>
+  mutate(Importance = ifelse(Sign == "NEG", -Importance, Importance)) |>
+  filter(Importance != 0) |>
+  ggplot(aes(x = reorder(Feature, abs(Importance)), y = Importance, fill = Importance)) +
+  geom_bar(stat = "identity") +
+  scale_fill_viridis(begin = 1, end = 0, option = "plasma") +
+  labs(x = "Protein", y = "Model importance") +
+  theme_light() +
+  coord_flip() +
+  guides(fill = F)
+
+features_aml_hm
+```
+
+### CLL
+
+```{r Balancing cancer controls, fig.width=10, fig.height=7}
+# Set parameters
+set.seed(123)
+case <- "AML"
+control <- c("CLL")
+ratio <- 4
+m_f_ratio <- 1.25
+
+# Set seed for reproducibility
+set.seed(123)
+
+# Initialize lists to store training and test data for each control group
+training_list <- list()
+test_list <- list()
+
+# Loop through each control group and perform the splitting
+for (disease in control) {
+  set.seed(123)  # Ensures reproducibility
+  
+  # Filter for the current disease
+  disease_data <- control_data_mixed %>%
+    filter(Disease == control)
+  
+  # Separate males and females
+  males <- disease_data %>% filter(Sex == "M")
+  females <- disease_data %>% filter(Sex == "F")
+  
+  train_male <- males |> slice_sample(n = round(nrow(males)*train_ratio))
+  train_female <- females |> slice_sample(n = round(nrow(females)*train_ratio))
+  
+  test_male <- males |> anti_join(train_male)
+  test_female <- females |> anti_join(train_female)
+  
+  # Combine the balanced dataset
+  balanced_train <- bind_rows(train_male, train_female)
+  balanced_test <- bind_rows(test_male, test_female)
+  
+  # Store the results in the lists
+  training_list[[disease]] <- balanced_train
+  test_list[[disease]] <- balanced_test
+}
+
+# Combine all control training and test data
+control_train_data <- bind_rows(training_list)
+control_test_data <- bind_rows(test_list)
+
+# Summarize the final datasets
+cat("Control Training Data Summary:\n")
+print(control_train_data %>% group_by(Disease, Sex) %>% summarize(n = n()))
+
+cat("Control Test Data Summary:\n")
+print(control_test_data %>% group_by(Disease, Sex) %>% summarize(n = n()))
+```
+
+Balance training and test sets based on sex
+
+```{r Splitting AML and healthy controls based on disease and sex}
+# Combining balanced data
+train_data <- bind_rows(aml_train, control_train_data)
+test_data <- bind_rows(aml_test, control_test_data)
+
+# Optionally check the composition of the resulting datasets
+# Summarize the training set
+train_summary <- train_data %>% 
+  group_by(Disease, Sex) %>% 
+  summarise(Count = n(), .groups = 'drop')
+
+# Summarize the test set
+test_summary <- test_data %>% 
+  group_by(Disease, Sex) %>% 
+  summarise(Count = n(), .groups = 'drop')
+
+# Print summaries
+print("Training Set Summary:")
+print(train_summary)
+print("Test Set Summary:")
+print(test_summary)
+```
+
+```{r Verifying results with healthy controls}
+### Verifying the result ###
+train_data |> mutate(Split = "Train") |> bind_rows(test_data |> mutate(Split = "Test")) |>
+  group_by(Disease, Split) |>
+  summarise(n = n(), .groups = "drop")
+
+# Check Male to Female ratio per disease
+train_data |> mutate(Split = "Train") |> bind_rows(test_data |> mutate(Split = "Test")) |> mutate(Disease_Split = interaction(Disease, Split)) |>
+  mutate(Sex = case_when(Sex == "M" ~ "Male",
+                         Sex == "F" ~ "Female",
+                         T ~ Sex)) |>
+  group_by(Disease_Split, Sex) |>
+  summarise(n = n(), .groups = "drop") |>
+  # Summarize the ratio males to females per disease
+  pivot_wider(names_from = Sex, values_from = n, values_fill = list(n = 0)) |>
+  mutate(Ratio_M_to_F = Male / Female)
+
+# Visualize Age and sex for Balanced_data
+train_data |> mutate(Split = "Train") |> bind_rows(test_data |> mutate(Split = "Test")) |> mutate(Disease_Split = interaction(Disease, Split)) |>
+  filter(Age != 0) |>
+  ggplot(aes(x = Age, y = Disease_Split, fill = Disease_Split)) +
+  geom_boxplot(color = "black") +
+  labs(x = "Age", y = "Cohort") +
+  theme_light() +
+  guides(fill = FALSE)
+
+train_data |> mutate(Split = "Train") |> bind_rows(test_data |> mutate(Split = "Test")) |> mutate(Disease_Split = interaction(Disease, Split)) |>
+  filter(!is.na(Sex)) |>
+  group_by(Disease_Split, Sex) |>
+  summarise(Count = n()) |> 
+  ggplot(aes(x = Disease_Split, y = Count, fill = Sex)) +
+  geom_col(position = "stack", color = "black", width = 0.7) +
+  labs(x = "Cancer", y = "Number of samples") +
+  theme_light() +
+  coord_flip() +
+  theme(legend.position = "top")
+```
+
+```{r}
+split_obj_balanced_aml_cll <- list(train_data |> select(-Sex, -Age, -Disease_Sex), test_data |> select(-Sex, -Age, -Disease_Sex))
+names(split_obj_balanced_aml_cll) <- c("train_data", "test_data")
+```
+
+```{r}
+lasso_res_aml_cll <- hd_model_rreg(split_obj_balanced_aml_cll, case = "AML", control = "CLL", balance_groups = FALSE, grid_size = 30, cor_threshold = 0.9, cv_sets = 5, mixture = 1, verbose = FALSE, seed = 123)
+```
+
+```{r Feature selection AML vs CLL, fig.width=10, fig.height=7}
+features_aml_cll <-  lasso_res_aml_cll$features |>
+  mutate(Importance = ifelse(Sign == "NEG", -Importance, Importance)) |>
+  filter(Importance != 0) |>
+  ggplot(aes(x = reorder(Feature, abs(Importance)), y = Importance, fill = Importance)) +
+  geom_bar(stat = "identity") +
+  scale_fill_viridis(begin = 1, end = 0, option = "plasma") +
+  labs(x = "Protein", y = "Model importance") +
+  theme_light() +
+  coord_flip() +
+  guides(fill = F)
+
+features_aml_cll
+```
+
+### DLBCL
+
+```{r Balancing cancer controls, fig.width=10, fig.height=7}
+# Set parameters
+set.seed(123)
+case <- "AML"
+control <- c("DLBCL")
+ratio <- 4
+m_f_ratio <- 1.25
+
+# Set seed for reproducibility
+set.seed(123)
+
+# Initialize lists to store training and test data for each control group
+training_list <- list()
+test_list <- list()
+
+# Loop through each control group and perform the splitting
+for (disease in control) {
+  set.seed(123)  # Ensures reproducibility
+  
+  # Filter for the current disease
+  disease_data <- control_data_mixed %>%
+    filter(Disease == control)
+  
+  # Separate males and females
+  males <- disease_data %>% filter(Sex == "M")
+  females <- disease_data %>% filter(Sex == "F")
+  
+  train_male <- males |> slice_sample(n = round(nrow(males)*train_ratio))
+  train_female <- females |> slice_sample(n = round(nrow(females)*train_ratio))
+  
+  test_male <- males |> anti_join(train_male)
+  test_female <- females |> anti_join(train_female)
+  
+  # Combine the balanced dataset
+  balanced_train <- bind_rows(train_male, train_female)
+  balanced_test <- bind_rows(test_male, test_female)
+  
+  # Store the results in the lists
+  training_list[[disease]] <- balanced_train
+  test_list[[disease]] <- balanced_test
+}
+
+# Combine all control training and test data
+control_train_data <- bind_rows(training_list)
+control_test_data <- bind_rows(test_list)
+
+# Summarize the final datasets
+cat("Control Training Data Summary:\n")
+print(control_train_data %>% group_by(Disease, Sex) %>% summarize(n = n()))
+
+cat("Control Test Data Summary:\n")
+print(control_test_data %>% group_by(Disease, Sex) %>% summarize(n = n()))
+```
+
+Balance training and test sets based on sex
+
+```{r Splitting AML and healthy controls based on disease and sex}
+# Combining balanced data
+train_data <- bind_rows(aml_train, control_train_data)
+test_data <- bind_rows(aml_test, control_test_data)
+
+# Optionally check the composition of the resulting datasets
+# Summarize the training set
+train_summary <- train_data %>% 
+  group_by(Disease, Sex) %>% 
+  summarise(Count = n(), .groups = 'drop')
+
+# Summarize the test set
+test_summary <- test_data %>% 
+  group_by(Disease, Sex) %>% 
+  summarise(Count = n(), .groups = 'drop')
+
+# Print summaries
+print("Training Set Summary:")
+print(train_summary)
+print("Test Set Summary:")
+print(test_summary)
+```
+
+```{r Verifying results with healthy controls}
+### Verifying the result ###
+train_data |> mutate(Split = "Train") |> bind_rows(test_data |> mutate(Split = "Test")) |>
+  group_by(Disease, Split) |>
+  summarise(n = n(), .groups = "drop")
+
+# Check Male to Female ratio per disease
+train_data |> mutate(Split = "Train") |> bind_rows(test_data |> mutate(Split = "Test")) |> mutate(Disease_Split = interaction(Disease, Split)) |>
+  mutate(Sex = case_when(Sex == "M" ~ "Male",
+                         Sex == "F" ~ "Female",
+                         T ~ Sex)) |>
+  group_by(Disease_Split, Sex) |>
+  summarise(n = n(), .groups = "drop") |>
+  # Summarize the ratio males to females per disease
+  pivot_wider(names_from = Sex, values_from = n, values_fill = list(n = 0)) |>
+  mutate(Ratio_M_to_F = Male / Female)
+
+# Visualize Age and sex for Balanced_data
+train_data |> mutate(Split = "Train") |> bind_rows(test_data |> mutate(Split = "Test")) |> mutate(Disease_Split = interaction(Disease, Split)) |>
+  filter(Age != 0) |>
+  ggplot(aes(x = Age, y = Disease_Split, fill = Disease_Split)) +
+  geom_boxplot(color = "black") +
+  labs(x = "Age", y = "Cohort") +
+  theme_light() +
+  guides(fill = FALSE)
+
+train_data |> mutate(Split = "Train") |> bind_rows(test_data |> mutate(Split = "Test")) |> mutate(Disease_Split = interaction(Disease, Split)) |>
+  filter(!is.na(Sex)) |>
+  group_by(Disease_Split, Sex) |>
+  summarise(Count = n()) |> 
+  ggplot(aes(x = Disease_Split, y = Count, fill = Sex)) +
+  geom_col(position = "stack", color = "black", width = 0.7) +
+  labs(x = "Cancer", y = "Number of samples") +
+  theme_light() +
+  coord_flip() +
+  theme(legend.position = "top")
+```
+
+```{r}
+split_obj_balanced_aml_dlbcl <- list(train_data |> select(-Sex, -Age, -Disease_Sex), test_data |> select(-Sex, -Age, -Disease_Sex))
+names(split_obj_balanced_aml_dlbcl) <- c("train_data", "test_data")
+```
+
+```{r}
+lasso_res_aml_dlbcl <- hd_model_rreg(split_obj_balanced_aml_dlbcl, case = "AML", control = "DLBCL", balance_groups = FALSE, grid_size = 30, cor_threshold = 0.9, cv_sets = 5, mixture = 1, verbose = FALSE, seed = 123)
+```
+
+```{r Feature selection AML vs DLBCL, fig.width=10, fig.height=7}
+features_aml_dlbcl <-  lasso_res_aml_dlbcl$features |>
+  mutate(Importance = ifelse(Sign == "NEG", -Importance, Importance)) |>
+  filter(Importance != 0) |>
+  ggplot(aes(x = reorder(Feature, abs(Importance)), y = Importance, fill = Importance)) +
+  geom_bar(stat = "identity") +
+  scale_fill_viridis(begin = 1, end = 0, option = "plasma") +
+  labs(x = "Protein", y = "Model importance") +
+  theme_light() +
+  coord_flip() +
+  guides(fill = F)
+
+features_aml_dlbcl
+```
+
+### Myeloma
+
+```{r Balancing cancer controls, fig.width=10, fig.height=7}
+# Set parameters
+set.seed(123)
+case <- "AML"
+control <- c("Myeloma")
+ratio <- 4
+m_f_ratio <- 1.25
+
+# Set seed for reproducibility
+set.seed(123)
+
+# Initialize lists to store training and test data for each control group
+training_list <- list()
+test_list <- list()
+
+# Loop through each control group and perform the splitting
+for (disease in control) {
+  set.seed(123)  # Ensures reproducibility
+  
+  # Filter for the current disease
+  disease_data <- control_data_mixed %>%
+    filter(Disease == control)
+  
+  # Separate males and females
+  males <- disease_data %>% filter(Sex == "M")
+  females <- disease_data %>% filter(Sex == "F")
+  
+  train_male <- males |> slice_sample(n = round(nrow(males)*train_ratio))
+  train_female <- females |> slice_sample(n = round(nrow(females)*train_ratio))
+  
+  test_male <- males |> anti_join(train_male)
+  test_female <- females |> anti_join(train_female)
+  
+  # Combine the balanced dataset
+  balanced_train <- bind_rows(train_male, train_female)
+  balanced_test <- bind_rows(test_male, test_female)
+  
+  # Store the results in the lists
+  training_list[[disease]] <- balanced_train
+  test_list[[disease]] <- balanced_test
+}
+
+# Combine all control training and test data
+control_train_data <- bind_rows(training_list)
+control_test_data <- bind_rows(test_list)
+
+# Summarize the final datasets
+cat("Control Training Data Summary:\n")
+print(control_train_data %>% group_by(Disease, Sex) %>% summarize(n = n()))
+
+cat("Control Test Data Summary:\n")
+print(control_test_data %>% group_by(Disease, Sex) %>% summarize(n = n()))
+```
+
+Balance training and test sets based on sex
+
+```{r Splitting AML and healthy controls based on disease and sex}
+# Combining balanced data
+train_data <- bind_rows(aml_train, control_train_data)
+test_data <- bind_rows(aml_test, control_test_data)
+
+# Optionally check the composition of the resulting datasets
+# Summarize the training set
+train_summary <- train_data %>% 
+  group_by(Disease, Sex) %>% 
+  summarise(Count = n(), .groups = 'drop')
+
+# Summarize the test set
+test_summary <- test_data %>% 
+  group_by(Disease, Sex) %>% 
+  summarise(Count = n(), .groups = 'drop')
+
+# Print summaries
+print("Training Set Summary:")
+print(train_summary)
+print("Test Set Summary:")
+print(test_summary)
+```
+
+```{r Verifying results with healthy controls}
+### Verifying the result ###
+train_data |> mutate(Split = "Train") |> bind_rows(test_data |> mutate(Split = "Test")) |>
+  group_by(Disease, Split) |>
+  summarise(n = n(), .groups = "drop")
+
+# Check Male to Female ratio per disease
+train_data |> mutate(Split = "Train") |> bind_rows(test_data |> mutate(Split = "Test")) |> mutate(Disease_Split = interaction(Disease, Split)) |>
+  mutate(Sex = case_when(Sex == "M" ~ "Male",
+                         Sex == "F" ~ "Female",
+                         T ~ Sex)) |>
+  group_by(Disease_Split, Sex) |>
+  summarise(n = n(), .groups = "drop") |>
+  # Summarize the ratio males to females per disease
+  pivot_wider(names_from = Sex, values_from = n, values_fill = list(n = 0)) |>
+  mutate(Ratio_M_to_F = Male / Female)
+
+# Visualize Age and sex for Balanced_data
+train_data |> mutate(Split = "Train") |> bind_rows(test_data |> mutate(Split = "Test")) |> mutate(Disease_Split = interaction(Disease, Split)) |>
+  filter(Age != 0) |>
+  ggplot(aes(x = Age, y = Disease_Split, fill = Disease_Split)) +
+  geom_boxplot(color = "black") +
+  labs(x = "Age", y = "Cohort") +
+  theme_light() +
+  guides(fill = FALSE)
+
+train_data |> mutate(Split = "Train") |> bind_rows(test_data |> mutate(Split = "Test")) |> mutate(Disease_Split = interaction(Disease, Split)) |>
+  filter(!is.na(Sex)) |>
+  group_by(Disease_Split, Sex) |>
+  summarise(Count = n()) |> 
+  ggplot(aes(x = Disease_Split, y = Count, fill = Sex)) +
+  geom_col(position = "stack", color = "black", width = 0.7) +
+  labs(x = "Cancer", y = "Number of samples") +
+  theme_light() +
+  coord_flip() +
+  theme(legend.position = "top")
+```
+
+```{r}
+split_obj_balanced_aml_myeloma <- list(train_data |> select(-Sex, -Age, -Disease_Sex), test_data |> select(-Sex, -Age, -Disease_Sex))
+names(split_obj_balanced_aml_myeloma) <- c("train_data", "test_data")
+```
+
+```{r}
+lasso_res_aml_myeloma <- hd_model_rreg(split_obj_balanced_aml_myeloma, case = "AML", control = "Myeloma", balance_groups = FALSE, grid_size = 30, cor_threshold = 0.9, cv_sets = 5, mixture = 1, verbose = FALSE, seed = 123)
+```
+
+```{r Feature selection AML vs Myeloma, fig.width=10, fig.height=7}
+features_aml_myeloma <-  lasso_res_aml_myeloma$features |>
+  mutate(Importance = ifelse(Sign == "NEG", -Importance, Importance)) |>
+  filter(Importance != 0) |>
+  ggplot(aes(x = reorder(Feature, abs(Importance)), y = Importance, fill = Importance)) +
+  geom_bar(stat = "identity") +
+  scale_fill_viridis(begin = 1, end = 0, option = "plasma") +
+  labs(x = "Protein", y = "Model importance") +
+  theme_light() +
+  coord_flip() +
+  guides(fill = F)
+
+features_aml_myeloma
+```
+
+## B: ROC curves
+
+```{r}
+# Prepare annotation text
+metrics_text <- sprintf(
+  "AUC = %s\nAccuracy = %s\nSensitivity = %s\nSpecificity = %s",
+  round(lasso_res_aml_myeloma$metrics$auc, 2),
+  round(lasso_res_aml_myeloma$metrics$accuracy, 2),
+  round(lasso_res_aml_myeloma$metrics$specificity, 2),
+  round(lasso_res_aml_myeloma$metrics$sensitivity, 2)
+)
+
+lasso_res_aml_myeloma$roc_curve +
+  annotate("text", x = 0.8, y = 0.3, label = metrics_text, size = 5, hjust = 1, vjust = 1) +
+  theme_light()
+```
+
+```{r ROC summary, fig.width=10, fig.height=7}
+# Define a list of diseases
+diseases <- c("healthy", "cancer", "hm", "cll", "dlbcl", "myeloma")
+roc_data <- list(
+  healthy = lasso_res_aml_healthy,
+  cancer = lasso_res_aml_cancer,
+  hm = lasso_res_aml_hm,
+  cll = lasso_res_aml_cll,
+  dlbcl = lasso_res_aml_dlbcl,
+  myeloma = lasso_res_aml_myeloma
+)
+
+# Function to generate ROC plot and extract metrics for a given disease
+generate_roc_plot_and_metrics <- function(roc_result, disease_name) {
+  # Directly use the metrics from the roc_result structure
+  auc <- round(roc_result$metrics$auc, 2)
+  accuracy <- round(roc_result$metrics$accuracy, 2)
+  sensitivity <- round(roc_result$metrics$sensitivity, 2)
+  specificity <- round(roc_result$metrics$specificity, 2)
+
+  # Prepare annotation text
+  metrics_text <- sprintf(
+    "AUC = %s\nAccuracy = %s\nSensitivity = %s\nSpecificity = %s",
+    auc, accuracy, sensitivity, specificity
+  )
+
+  # Create ROC plot
+  plot <- roc_result$roc_curve +
+    annotate("text", x = 0.8, y = 0.3, label = metrics_text, size = 5, hjust = 1, vjust = 1) +
+    labs(title = sprintf("ROC Curve for AML vs. %s", toupper(disease_name))) +
+    theme_light()
+
+  # Return both plot and metrics in a list
+  list(
+    Plot = plot,
+    Metrics = data.frame(
+      Disease = disease_name,
+      AUC = auc,
+      Accuracy = accuracy,
+      Sensitivity = sensitivity,
+      Specificity = specificity
+    )
+  )
+}
+
+# Apply the function to each disease and collect results
+results <- lapply(names(roc_data), function(disease) generate_roc_plot_and_metrics(roc_data[[disease]], disease))
+
+# Extract plots and metrics separately
+roc_plots <- lapply(results, `[[`, "Plot")
+metrics_summary <- do.call(rbind, lapply(results, `[[`, "Metrics"))
+
+# Now roc_plots contains all the ROC curve plots, and metrics_summary contains a data frame of all metrics
+print(roc_plots)  # This will print all plots
+print(metrics_summary)  # This will show the summary table of metrics
+```
+
+## C: Confusion matrices
+
+```{r Confusion matrix AML vs healthy}
+conf_matrix_df <- as.data.frame.matrix(lasso_res_aml_healthy$metrics$confusion_matrix$table)
+conf_aml_healthy <- create_conf_plot(lasso_res_aml_healthy$metrics$confusion_matrix$table, "Healthy", "AML")
+conf_aml_healthy
+```
+
+```{r Confusion matrix AML vs cancer}
+conf_matrix_df <- as.data.frame.matrix(lasso_res_aml_cancer$metrics$confusion_matrix$table)
+conf_aml_cancer <- create_conf_plot(conf_matrix_df, "Pan-cancer", "AML")
+conf_aml_cancer
+```
+
+```{r Confusion matrix AML vs hm}
+conf_matrix_df <- as.data.frame.matrix(lasso_res_aml_hm$metrics$confusion_matrix$table)
+conf_aml_hm <- create_conf_plot(conf_matrix_df, "Hematological malignancies", "AML")
+conf_aml_hm
+```
+
+```{r Confusion matrix AML vs CLL}
+conf_matrix_df <- as.data.frame.matrix(lasso_res_aml_cll$metrics$confusion_matrix$table)
+conf_aml_cll <- create_conf_plot(conf_matrix_df, "CLL", "AML")
+conf_aml_cll
+```
+
+```{r Confusion matrix AML vs DLBCL}
+conf_matrix_df <- as.data.frame.matrix(lasso_res_aml_dlbcl$metrics$confusion_matrix$table)
+conf_aml_dlbcl <- create_conf_plot(conf_matrix_df, "DLBCL", "AML")
+conf_aml_dlbcl
+```
+
+```{r Confusion matrix AML vs Myeloma}
+conf_matrix_df <- as.data.frame.matrix(lasso_res_aml_myeloma$metrics$confusion_matrix$table)
+conf_aml_myeloma <- create_conf_plot(conf_matrix_df, "Myeloma", "AML")
+conf_aml_myeloma
+```
+
+## Model summary
+
+```{r}
+model_summary_res <- hd_plot_model_summary(list("Healthy" = lasso_res_aml_healthy, 
+                                                "Pan-Cancer" = lasso_res_aml_cancer, 
+                                                "Hematological malignancies" = lasso_res_aml_hm,
+                                                "CLL" = lasso_res_aml_cll,
+                                                "DLBCL" = lasso_res_aml_dlbcl,
+                                                "Myeloma" = lasso_res_aml_myeloma))
+```
+
+```{r ,fig.width=10, fig.height=5}
+ml_metric_bar_plot <- model_summary_res$metrics_barplot + theme_light()
+
+ml_metric_bar_plot
+ggsave("../plots/bar/AML_LASSO_metrics_barplot.pdf", width = 10, height = 5)
+```
+
+```{r , width=10, height=5}
+ml_overlap_upset <- model_summary_res$upset_plot_features
+
+ml_overlap_upset
+
+pdf("../plots/upset/ml_overlap_upset.pdf", width = 10, height = 5)
+ml_overlap_upset
+dev.off()
+```
+
+```{r , fig.width=10, fig.height=7}
+feature_panel <- lasso_res_aml_healthy[["features"]] |> filter(Importance != 0) |> mutate(Class = "Healthy") |>
+  bind_rows(lasso_res_aml_cancer[["features"]] |> filter(Importance != 0) |> mutate(Class = "Pan-cancer"),
+            lasso_res_aml_hm[["features"]] |> filter(Importance != 0) |> mutate(Class = "Hematological malignancies"),
+            lasso_res_aml_cll[["features"]] |> filter(Importance != 0) |> mutate(Class = "CLL"),
+            lasso_res_aml_dlbcl[["features"]] |> filter(Importance != 0) |> mutate(Class = "DLBCL"),
+            lasso_res_aml_myeloma[["features"]] |> filter(Importance != 0) |> mutate(Class = "Myeloma"))
+
+control_pal <-  hd_palettes()[["class"]]
+names(control_pal) <- c("Healthy", "Pan-cancer", "Hematological malignancies", "CLL", "DLBCL", "Myeloma")
+
+ml_feature_network <- hd_plot_feature_network(feature_panel,
+                        plot_color = "Scaled_Importance",
+                        class_palette = control_pal)
+
+ml_feature_network
+ggsave("../plot/network/AML_LASSO_feature_network.pdf", width = 10, height = 7)
+```
+
+Summary of the ML models
+
+## Fig 3 A-C: LASSO healthy & cancer
+
+Healthy and cancer.
+
+```{r ML summary supp, fig.width=20, fig.height=10}
+features_aml_healthy + features_aml_cancer + roc_plots[[1]] + roc_plots[[2]] + conf_aml_healthy + conf_aml_cancer +
+  plot_layout(ncol = 2)
+ggsave("../plots/combined/AML_LASSO_healthy_cancer.pdf", width = 20, height = 10)
+```
+
+## D: Example boxplots
+
+```{r ML example boxplots, fig.width=14, fig.height=7}
+ml_example_boxplots <- olink_data_long %>%
+  select(DAid, Assay, NPX) %>%
+  left_join(metadata, by = "DAid") %>%
+  filter(Assay %in% c("LCN2", "CDH17", "FCGR3B", "TNFRSF10C")) %>%
+  mutate(Assay = factor(Assay, levels = c("LCN2", "CDH17", "FCGR3B", "TNFRSF10C"))) %>%
+  ggplot(aes(x = factor(Disease, levels = names(pal_aml_healthy)), y = NPX, color = Disease, fill = Disease)) + 
+  geom_quasirandom(alpha = 0.8, show.legend = FALSE) + 
+  geom_boxplot(color = "black", outlier.color = NA, alpha = 0.7) + 
+  facet_wrap(~ Assay, ncol = 2, scales = "free_y") + 
+  scale_color_manual(values = pal_aml_healthy) + 
+  scale_fill_manual(values = pal_aml_healthy) +
+  theme_light() + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(x = "Cohort") +
+  guides(fill = FALSE, color = FALSE)
+
+ml_example_boxplots
+
+ggsave("Boxplot AML vs Healthy and Cancer ML.pdf", path = "../plots/boxplot/", width = 14, height = 7)
+```
+
+```{r ML example boxplots, fig.width=5, fig.height=20}
+ml_example_boxplots <- olink_data_long %>%
+  select(DAid, Assay, NPX) %>%
+  left_join(metadata, by = "DAid") %>%
+  filter(Assay %in% c("LCN2", "CDH17", "FCGR3B", "TNFRSF10C")) %>%
+  mutate(Assay = factor(Assay, levels = c("LCN2", "CDH17", "FCGR3B", "TNFRSF10C"))) %>%
+  ggplot(aes(x = factor(Disease, levels = names(pal_aml_healthy)), y = NPX, color = Disease, fill = Disease)) + 
+  geom_quasirandom(alpha = 0.8, show.legend = FALSE) + 
+  geom_boxplot(color = "black", outlier.color = NA, alpha = 0.7) + 
+  facet_wrap(~ Assay, ncol = 1, scales = "free_y") + 
+  scale_color_manual(values = pal_aml_healthy) + 
+  scale_fill_manual(values = pal_aml_healthy) +
+  theme_light() + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(x = "Cohort") +
+  guides(fill = FALSE, color = FALSE)
+
+ml_example_boxplots
+
+ggsave("Boxplot AML vs Healthy and Cancer ML alt.pdf", path = "../plots/boxplot/", width = 5, height = 20)
+```
+
+Number of samples per selected protein
+
+```{r}
+olink_data_long %>%
+  select(DAid, Assay, NPX) %>%
+  filter(Assay %in% c("LCN2", "CDH17", "FCGR3B", "TNFRSF10C")) |>
+  group_by(Assay) |>
+  summarize(n = n())
+```
+
+## Probability plots
+
+```{r}
+probability_aml_healthy <- lasso_res_aml_healthy$probability_plot + theme_light()
+probability_aml_cancer <- lasso_res_aml_cancer$probability_plot + theme_light()
+probability_aml_hm <- lasso_res_aml_hm$probability_plot + theme_light()
+probability_aml_cll <- lasso_res_aml_cll$probability_plot + theme_light()
+probability_aml_dlbcl <- lasso_res_aml_dlbcl$probability_plot + theme_light()
+probability_aml_myeloma <- lasso_res_aml_myeloma$probability_plot + theme_light()
+```
+
+## Final Fig 3
+
+```{r ML summary healthy cancer, fig.width=20, fig.height=20}
+features_aml_healthy + features_aml_cancer + roc_plots[[1]] + roc_plots[[2]] + conf_aml_healthy + conf_aml_cancer + probability_aml_healthy + probability_aml_cancer +
+  plot_layout(ncol = 2) 
+
+ggsave("../plots/combined/AML_LASSO_healthy_cancer_final.pdf", width = 20, height = 20)
+```
+
+Hematological malignancies.
+
+```{r ML summary supp alt 1, fig.width=20, fig.height=10}
+features_aml_hm + features_aml_cll + features_aml_dlbcl + features_aml_myeloma + roc_plots[[3]] + roc_plots[[4]] + roc_plots[[5]] + roc_plots[[6]] +
+  plot_layout(ncol = 4)
+ggsave("../plots/combined/AML_LASSO_hm_cll_dlbcl_myeloma.pdf", width = 20, height = 10)
+```
+
+### Standing plot
+
+```{r ML summary supp alt 2, fig.width=20, fig.height=25}
+features_aml_hm + roc_plots[[3]] + conf_aml_hm + probability_aml_hm + features_aml_cll + roc_plots[[4]] + conf_aml_cll + probability_aml_cll + features_aml_dlbcl + roc_plots[[5]] + conf_aml_dlbcl + probability_aml_dlbcl + features_aml_myeloma + roc_plots[[6]] + conf_aml_myeloma + probability_aml_myeloma +
+  plot_layout(ncol = 4)
+
+ggsave("../plots/combined/AML_LASSO_hm_cll_dlbcl_myeloma_standing.pdf", width = 20, height = 25)
+```
+
+### Performance evaluation plot
+
+```{r , fig.width=10, fig.height=20}
+# Plot confusion plot and probability plot including all controls
+conf_aml_healthy + probability_aml_healthy + conf_aml_cancer + probability_aml_cancer + conf_aml_hm + probability_aml_hm + conf_aml_cll + probability_aml_cll + conf_aml_dlbcl + probability_aml_dlbcl + conf_aml_myeloma + probability_aml_myeloma +
+  plot_layout(ncol = 2)
+
+ggsave("../plots/combined/Performance all.pdf", width = 10, height = 20)
+```
+
+# Export tables
+
+## Selected features
+
+```{r}
+# ML summary
+# Healthy control
+ml_summary_aml_healthy <- lasso_res_aml_healthy$features |> 
+  rename(Importance_healthy = Importance, Sign_healthy = Sign, Scaled_importance_healthy = Scaled_Importance)
+
+# Pan-cancer control
+ml_summary_aml_cancer <- lasso_res_aml_cancer$features |> 
+  rename(Importance_cancer = Importance, Sign_cancer = Sign, Scaled_importance_cancer = Scaled_Importance)
+
+# Hematological malignancies control
+ml_summary_aml_hm <- lasso_res_aml_hm$features |> 
+  rename(Importance_hm = Importance, Sign_hm = Sign, Scaled_importance_hm = Scaled_Importance)
+
+# CLL control
+ml_summary_aml_cll <- lasso_res_aml_cll$features |> 
+  rename(Importance_cll = Importance, Sign_cll = Sign, Scaled_importance_cll = Scaled_Importance)
+
+# DLBCL control
+ml_summary_aml_dlbcl <- lasso_res_aml_dlbcl$features |> 
+  rename(Importance_lymphoma = Importance, Sign_lymphoma = Sign, Scaled_importance_lymphoma = Scaled_Importance)
+
+# Myeloma control
+ml_summary_aml_myeloma <- lasso_res_aml_myeloma$features |> 
+  rename(Importance_myeloma = Importance, Sign_myeloma = Sign, Scaled_importance_myeloma = Scaled_Importance)
+
+ml_summary <- ml_summary_aml_healthy |> 
+  full_join(ml_summary_aml_cancer, by = "Feature") |>
+  full_join(ml_summary_aml_hm, by = "Feature") |>
+  full_join(ml_summary_aml_cll, by = "Feature") |>
+  full_join(ml_summary_aml_dlbcl, by = "Feature") |>
+  full_join(ml_summary_aml_myeloma, by = "Feature")
+
+write_xlsx(ml_summary, "../tables/ML_summary.xlsx")
+```
+
+## Model performance
+
+```{r}
+# Create a summary table of model performance metrics
+model_performance <- data.frame(
+  Disease = c("Healthy", "Pan-cancer", "Hematological malignancies", "CLL", "DLBCL", "Myeloma"),
+  AUC = c(lasso_res_aml_healthy$metrics$auc, lasso_res_aml_cancer$metrics$auc, lasso_res_aml_hm$metrics$auc, lasso_res_aml_cll$metrics$auc, lasso_res_aml_dlbcl$metrics$auc, lasso_res_aml_myeloma$metrics$auc),
+  Accuracy = c(lasso_res_aml_healthy$metrics$accuracy, lasso_res_aml_cancer$metrics$accuracy, lasso_res_aml_hm$metrics$accuracy, lasso_res_aml_cll$metrics$accuracy, lasso_res_aml_dlbcl$metrics$accuracy, lasso_res_aml_myeloma$metrics$accuracy),
+  Sensitivity = c(lasso_res_aml_healthy$metrics$sensitivity, lasso_res_aml_cancer$metrics$sensitivity, lasso_res_aml_hm$metrics$sensitivity, lasso_res_aml_cll$metrics$sensitivity, lasso_res_aml_dlbcl$metrics$sensitivity, lasso_res_aml_myeloma$metrics$sensitivity),
+  Specificity = c(lasso_res_aml_healthy$metrics$specificity, lasso_res_aml_cancer$metrics$specificity, lasso_res_aml_hm$metrics$specificity, lasso_res_aml_cll$metrics$specificity, lasso_res_aml_dlbcl$metrics$specificity, lasso_res_aml_myeloma$metrics$specificity)
+)
+
+write_xlsx(model_performance, "../tables/ML_model_performance.xlsx")
+```
+
+## Combine DA & ML summary
+
+```{r}
+# Save the DE & ML results to an Excel file
+protein_summary <- protein_summary_aml_healthy |> 
+  full_join(ml_summary_aml_healthy, by = "Feature") |>
+  right_join(protein_summary_aml_cancer, by = "Feature") |>
+  full_join(ml_summary_aml_cancer, by = "Feature") |>
+  right_join(protein_summary_aml_hm, by = "Feature") |>
+  full_join(ml_summary_aml_hm, by = "Feature") |>
+  right_join(protein_summary_aml_cll, by = "Feature") |>
+  full_join(ml_summary_aml_cll, by = "Feature") |>
+  right_join(protein_summary_aml_dlbcl, by = "Feature") |>
+  full_join(ml_summary_aml_dlbcl, by = "Feature") |>
+  right_join(protein_summary_aml_myeloma, by = "Feature") |>
+  full_join(ml_summary_aml_myeloma, by = "Feature")
+```
+
+# SessionInfo
+
+```{r}
+sessionInfo()
+```
+
+End of file.

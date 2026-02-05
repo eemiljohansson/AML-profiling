@@ -1,42 +1,11 @@
 ---
-title: "Blood plasma profiling using proximity extension assay in patients with acute myeloid leukemia"
-subtitle: "Differential expression analyses"
-author: "Emil Johansson, María Bueno Álvez, Sören Lehmann, Tobias Sjöblom, Ulf Gyllensten, Fredrik Pontén, Göran Bergström, Adil Mardinouglu, Wen Zhong, Mathias Uhlén & Fredrik Edfors"
-date: last-modified
-date-format: "dddd [the] Do [of] MMMM YYYY"
-format:
-  html:
-    theme: lumen
-    title-block-banner: true
-    smooth-scroll: true
-    toc: true
-    toc-depth: 4
-    toc-location: right
-    number-sections: true
-    number-depth: 4
-    code-fold: true
-    code-tools: true
-    code-copy: true
-    code-overflow: wrap
-    df-print: kable
-    standalone: true
-    fig-align: left
-    figure:
-      caption: "Figure {number}: {label}"
-editor_options: 
-  chunk_output_type: inline
-execute:
-  echo: true
-  message: false
-  warning: false
-params: 
-  disease: "Abdominal aortic aneruysm"
-editor: 
-  markdown: 
-    wrap: 72
+title: "differential_analysis"
+format: html
 ---
 
-# Load packages
+# Setup
+
+## Load packages
 
 ```{r Loading packages, warning=FALSE}
 library(tidyverse) # v.2.0.0
@@ -56,18 +25,18 @@ library(RColorBrewer) # v.1.1-3
 library(writexl) # v.1.5.2
 ```
 
-# Source scrips
+## Source scrips
 
 ```{r Loading scripts}
 source("../scripts/functions/functions_disease_analyses.R")
 source("../scripts/functions/custom_plots.R")
 ```
 
-# Read data
+## Read data
 
 ```{r Loading data, warning=FALSE}
 # Read data
-data_long <-  read_csv("../data/data_long.csv")
+data_long <- read_csv("../data/data_long.csv")
 data_wide <- read_csv("../data/data_wide.csv")
 metadata <- read_csv("../data/metadata.csv")
 olink_data_long <- read_csv("../data/olink_data_long.csv")

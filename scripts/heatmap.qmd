@@ -1,0 +1,370 @@
+---
+title: "heatmap"
+format: html
+---
+
+# Setup
+
+## Load packages
+
+## Read datata
+
+# Figure 4: Comparing different control groups
+
+## Overlapping samples
+
+### A: All significant
+
+```{r All overlapping DE samples not significant, fig.width=20, fig.height=7}
+# Upset plot of overlapping upregulated proteins
+de_res <- list(
+  "Healthy" = protein_summary_aml_healthy |> filter(sig_healthy != "not significant"),
+  "Pan-cancer" = protein_summary_aml_cancer |> filter(sig_cancer != "not significant"),
+  "Hematological malignancies" = protein_summary_aml_hm |> filter(sig_hm != "not significant"),
+  "CLL" = protein_summary_aml_cll |> filter(sig_cll != "not significant"),
+  "DLBCL" = protein_summary_aml_dlbcl |> filter(sig_lymphoma != "not significant"),
+  "Myeloma" = protein_summary_aml_myeloma |> filter(sig_myeloma != "not significant")
+)
+
+# First, ensure every dataframe has columns for all comparisons, initialized to FALSE
+de_res <- lapply(de_res, function(df, all_comparisons) {
+  # Add each comparison as a new column initialized to FALSE
+  cols_to_add <- setdiff(all_comparisons, names(df))
+  df[cols_to_add] <- lapply(cols_to_add, function(x) FALSE)
+  df
+}, all_comparisons = names(de_res))
+
+# Now, set the respective comparison column to TRUE for each dataframe in the list
+de_res <- Map(function(df, name) {
+  df %>% 
+    distinct(Feature) %>% 
+    mutate(!!name := TRUE)
+}, de_res, names(de_res))
+
+# Combine all dataframes into one
+combined_df <- bind_rows(de_res) %>%
+  group_by(Feature) %>%
+  summarise(across(everything(), any, na.rm = TRUE), .groups = 'drop') |>
+  mutate(Count = rowSums(across(everything(), ~ .x == TRUE)))
+
+shared_df <- combined_df %>%
+  dplyr::rowwise() %>%
+  mutate(Shared_Comparisons = toString(names(.)[-1][c_across(-1) == TRUE])) |>
+  dplyr::select(Feature, Shared_Comparisons, Count)
+
+upset(
+  combined_df,
+  names(de_res),
+  name = 'dataset',
+  width_ratio = 0.1,
+#  min_degree = 3,
+#  max_defree = 15,
+#  n_intersections = 100,
+  min_size = 0
+)
+
+ggsave("results/overlaps/AML_DE_Overlap_All.pdf", width = 20, height = 7)
+```
+
+### S3A: Upregulated only
+
+```{r All overlapping DE samples significant up, fig.width=20, fig.height=7}
+# Upset plot of overlapping upregulated proteins
+de_res <- list(
+  "Healthy" = protein_summary_aml_healthy |> filter(sig_healthy == "significant up"),
+  "Pan-cancer" = protein_summary_aml_cancer |> filter(sig_cancer == "significant up"),
+  "Hematological malignancies" = protein_summary_aml_hm |> filter(sig_hm == "significant up"),
+  "CLL" = protein_summary_aml_cll |> filter(sig_cll == "significant up"),
+  "DLBCL" = protein_summary_aml_dlbcl |> filter(sig_lymphoma == "significant up"),
+  "Myeloma" = protein_summary_aml_myeloma |> filter(sig_myeloma == "significant up")
+)
+
+# First, ensure every dataframe has columns for all comparisons, initialized to FALSE
+de_res <- lapply(de_res, function(df, all_comparisons) {
+  # Add each comparison as a new column initialized to FALSE
+  cols_to_add <- setdiff(all_comparisons, names(df))
+  df[cols_to_add] <- lapply(cols_to_add, function(x) FALSE)
+  df
+}, all_comparisons = names(de_res))
+
+# Now, set the respective comparison column to TRUE for each dataframe in the list
+de_res <- Map(function(df, name) {
+  df %>% 
+    distinct(Feature) %>% 
+    mutate(!!name := TRUE)
+}, de_res, names(de_res))
+
+# Combine all dataframes into one
+combined_df <- bind_rows(de_res) %>%
+  group_by(Feature) %>%
+  summarise(across(everything(), any, na.rm = TRUE), .groups = 'drop') |>
+  mutate(Count = rowSums(across(everything(), ~ .x == TRUE)))
+
+shared_df <- combined_df %>%
+  dplyr::rowwise() %>%
+  mutate(Shared_Comparisons = toString(names(.)[-1][c_across(-1) == TRUE])) |>
+  dplyr::select(Feature, Shared_Comparisons, Count)
+
+upset(
+  combined_df,
+  names(de_res),
+  name = 'dataset',
+  width_ratio = 0.1,
+#  min_degree = 3,
+#  max_defree = 15,
+#  n_intersections = 100,
+  min_size = 0
+)
+
+ggsave("results/overlaps/AML_DE_Overlap_Up.pdf", width = 20, height = 7)
+```
+
+### S3B: Downregulated only
+
+```{r All overlapping DE samples significant down, fig.width=20, fig.height=7}
+# Upset plot of overlapping upregulated proteins
+de_res <- list(
+  "Healthy" = protein_summary_aml_healthy |> filter(sig_healthy == "significant down"),
+  "Pan-cancer" = protein_summary_aml_cancer |> filter(sig_cancer == "significant down"),
+  "Hematological malignancies" = protein_summary_aml_hm |> filter(sig_hm == "significant down"),
+  "CLL" = protein_summary_aml_cll |> filter(sig_cll == "significant down"),
+  "DLBCL" = protein_summary_aml_dlbcl |> filter(sig_lymphoma == "significant down"),
+  "Myeloma" = protein_summary_aml_myeloma |> filter(sig_myeloma == "significant down")
+)
+
+# First, ensure every dataframe has columns for all comparisons, initialized to FALSE
+de_res <- lapply(de_res, function(df, all_comparisons) {
+  # Add each comparison as a new column initialized to FALSE
+  cols_to_add <- setdiff(all_comparisons, names(df))
+  df[cols_to_add] <- lapply(cols_to_add, function(x) FALSE)
+  df
+}, all_comparisons = names(de_res))
+
+# Now, set the respective comparison column to TRUE for each dataframe in the list
+de_res <- Map(function(df, name) {
+  df %>% 
+    distinct(Feature) %>% 
+    mutate(!!name := TRUE)
+}, de_res, names(de_res))
+
+# Combine all dataframes into one
+combined_df <- bind_rows(de_res) %>%
+  group_by(Feature) %>%
+  summarise(across(everything(), any, na.rm = TRUE), .groups = 'drop') |>
+  mutate(Count = rowSums(across(everything(), ~ .x == TRUE)))
+
+shared_df <- combined_df %>%
+  dplyr::rowwise() %>%
+  mutate(Shared_Comparisons = toString(names(.)[-1][c_across(-1) == TRUE])) |>
+  dplyr::select(Feature, Shared_Comparisons, Count)
+
+upset(
+  combined_df,
+  names(de_res),
+  name = 'dataset',
+  width_ratio = 0.1,
+#  min_degree = 3,
+#  max_defree = 15,
+#  n_intersections = 100,
+  min_size = 0
+)
+
+ggsave("results/overlaps/AML_DE_Overlap_Down.pdf", width = 20, height = 7)
+```
+
+## B: Heatmap: DE
+
+```{r Heatmap combining data}
+# Prepare the data for the heatmap
+ml_combined_data <- lasso_res_aml_healthy$features |>
+  mutate(Comparison = "Healthy") |>
+  bind_rows(lasso_res_aml_cancer$features |>
+              mutate(Comparison = "Pan-cancer")) |>
+  bind_rows(lasso_res_aml_hm$features |>
+              mutate(Comparison = "Hematological malignancies")) |>
+  bind_rows(lasso_res_aml_cll$features |>
+              mutate(Comparison = "CLL")) |>
+  bind_rows(lasso_res_aml_dlbcl$features |>
+              mutate(Comparison = "DLBCL")) |>
+  bind_rows(lasso_res_aml_myeloma$features |>
+              mutate(Comparison = "Myeloma"))
+```
+
+```{r Preparing heatmap data}
+# Prepare the data for the heatmap
+data_heatmap <- bind_rows(
+  de_aml_healthy$de_res |> 
+    mutate(sig = case_when(adj.P.Val < 0.05 & logFC > 0 ~ "significant up",
+                         adj.P.Val < 0.05 & logFC < 0 ~ "significant down",
+                         T ~ "not significant")) %>% 
+    select(Feature, logFC, adj.P.Val, sig) |> 
+    mutate(Comparison = "Healthy"),
+  
+  de_aml_cancer$de_res |> 
+    mutate(sig = case_when(adj.P.Val < 0.05 & logFC > 0 ~ "significant up",
+                         adj.P.Val < 0.05 & logFC < 0 ~ "significant down",
+                         T ~ "not significant")) %>% 
+    select(Feature, logFC, adj.P.Val, sig) |> 
+    mutate(Comparison = "Pan-cancer"),
+  
+  de_aml_hm$de_res |> 
+    mutate(sig = case_when(adj.P.Val < 0.05 & logFC > 0 ~ "significant up",
+                         adj.P.Val < 0.05 & logFC < 0 ~ "significant down",
+                         T ~ "not significant")) %>% 
+    select(Feature, logFC, adj.P.Val, sig) |> 
+    mutate(Comparison = "Hematological malignancies"),
+  de_aml_cll$de_res |> mutate(sig = case_when(adj.P.Val < 0.05 & logFC > 0 ~ "significant up",
+                         adj.P.Val < 0.05 & logFC < 0 ~ "significant down",
+                         T ~ "not significant")) %>% 
+    select(Feature, logFC, adj.P.Val, sig) |> 
+    mutate(Comparison = "CLL"),
+  
+  de_aml_dlbcl$de_res |> 
+    mutate(sig = case_when(adj.P.Val < 0.05 & logFC > 0 ~ "significant up",
+                         adj.P.Val < 0.05 & logFC < 0 ~ "significant down",
+                         T ~ "not significant")) %>% 
+    select(Feature, logFC, adj.P.Val, sig) |> 
+    mutate(Comparison = "DLBCL"),
+  
+  de_aml_myeloma$de_res |> 
+    mutate(sig = case_when(adj.P.Val < 0.05 & logFC > 0 ~ "significant up",
+                         adj.P.Val < 0.05 & logFC < 0 ~ "significant down",
+                         T ~ "not significant")) %>% 
+    select(Feature, logFC, adj.P.Val, sig) |> 
+    mutate(Comparison = "Myeloma")
+) 
+
+# Declare the proteins for the heatmap
+heatmap_prots <- bind_rows(
+  de_aml_healthy$de_res |> 
+    mutate(sig = case_when(adj.P.Val < 0.05 & logFC > 0 ~ "significant up",
+                         adj.P.Val < 0.05 & logFC < 0 ~ "significant down",
+                         T ~ "not significant")) %>%  
+    select(Feature, logFC, adj.P.Val, sig) |> 
+    mutate(Comparison = "Healthy") |> 
+    filter(abs(logFC) >= 2, adj.P.Val < 0.05),
+  
+  de_aml_cancer$de_res |> 
+    mutate(sig = case_when(adj.P.Val < 0.05 & logFC > 0 ~ "significant up",
+                         adj.P.Val < 0.05 & logFC < 0 ~ "significant down",
+                         T ~ "not significant")) %>%  
+    select(Feature, logFC, adj.P.Val, sig) |> 
+    mutate(Comparison = "Pan-cancer") |> 
+    filter(abs(logFC) >= 2, adj.P.Val < 0.05),
+  
+  de_aml_hm$de_res |> 
+    mutate(sig = case_when(adj.P.Val < 0.05 & logFC > 0 ~ "significant up",
+                         adj.P.Val < 0.05 & logFC < 0 ~ "significant down",
+                         T ~ "not significant")) %>%  
+    select(Feature, logFC, adj.P.Val, sig) |> 
+    mutate(Comparison = "Hematological malignancies") |> 
+    filter(abs(logFC) >= 2, adj.P.Val < 0.05),
+  
+  de_aml_cll$de_res |> 
+    mutate(sig = case_when(adj.P.Val < 0.05 & logFC > 0 ~ "significant up",
+                         adj.P.Val < 0.05 & logFC < 0 ~ "significant down",
+                         T ~ "not significant")) %>%  
+    select(Feature, logFC, adj.P.Val, sig) |> mutate (Comparison = "CLL") |> 
+    filter(abs(logFC) >= 2, adj.P.Val < 0.05),
+  de_aml_dlbcl$de_res |> mutate(sig = case_when(adj.P.Val < 0.05 & logFC > 0 ~ "significant up",
+                         adj.P.Val < 0.05 & logFC < 0 ~ "significant down",
+                         T ~ "not significant")) %>% select(Feature, logFC, adj.P.Val, sig) |> 
+    mutate(Comparison = "DLBCL") |> 
+    filter(abs(logFC) >= 2, adj.P.Val < 0.05),
+  
+  de_aml_myeloma$de_res |> 
+    mutate(sig = case_when(adj.P.Val < 0.05 & logFC > 0 ~ "significant up",
+                         adj.P.Val < 0.05 & logFC < 0 ~ "significant down",
+                         T ~ "not significant")) %>% 
+    select(Feature, logFC, adj.P.Val, sig) |> 
+    mutate(Comparison = "Myeloma") |> 
+    filter(abs(logFC) >= 2, adj.P.Val < 0.05),
+  ml_combined_data
+)
+
+# Unique proteins for the heatmap
+heatmap_unique_prots <- heatmap_prots |> distinct(Feature)
+
+# Levels for the heatmap
+levels_heatmap <- c("Healthy", "Pan-cancer", "Hematological malignancies", "CLL", "DLBCL", "Myeloma")
+
+# Extract logFC values for the Healthy category from heatmap_data
+healthy_ordered <- data_heatmap |> filter(Comparison == "Healthy") |> select(Feature, logFC) |> arrange(logFC) |> distinct(Feature)
+```
+
+```{r Heatmap, fig.width=30, fig.height=5}
+data_heatmap |>
+  filter(Feature %in% heatmap_unique_prots$Feature) |>
+  full_join(ml_combined_data, by = c("Feature", "Comparison")) |>
+  mutate(
+    Significance = ifelse(adj.P.Val < 0.05, "*", ""),  # Set significance flag
+    color = ifelse(
+      Sign == "POS", 
+      max(logFC, na.rm = TRUE),  # Minimum logFC for positive signs
+      min(logFC, na.rm = TRUE)   # Maximum logFC for non-positive signs
+    )) |>
+  ggplot(aes(x = factor(Comparison, levels = levels_heatmap), y = factor(Feature, levels = healthy_ordered$Feature), fill = logFC, stroke = 1)) +
+  geom_tile(color = "black", width = 1, height = 1, size = 0.2) +
+  geom_point(aes(x = factor(Comparison, levels = levels_heatmap), y = factor(Feature, levels = healthy_ordered$Feature), fill = color, size = Scaled_Importance), color = "black", shape = 21, stroke = 0.5) +
+  scale_fill_gradient2(low = pal_de[[3]], mid = "white", high = pal_de[[2]], midpoint = 0) +
+  scale_color_gradient2(low = pal_de[[3]], mid = "white", high = pal_de[[2]], midpoint = 0, limits = c(-100, 100)) +
+  geom_text(aes(label = Significance), color = "black", size = 4) +
+  theme_light() +
+  coord_flip() +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank(),
+        axis.text.y = element_text(size = 20), axis.text.x = element_text(size = 20),
+        legend.position = "top") +
+#  guides(fill = FALSE, color = FALSE) +
+  # adjust the x-axis ticks to 90 degrees
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1))
+
+ggsave("Heatmap DE and ML ordered.pdf", path = "results/heatmap/", width = 30, height = 5)
+```
+
+## C: Barplot DE significance
+
+```{r Barplot DE sig, fig.width=10, fig.height=7}
+bar_plot_sig <- data_heatmap |>
+  mutate(sig=ifelse(adj.P.Val < 0.05 & logFC < 0, "significant down",
+                    ifelse(adj.P.Val < 0.05 & logFC > 0, "significant up", "not significant"))) |>
+  group_by(Comparison, sig) |>
+  summarise(Count = n()) |>
+  ggplot(aes(x = factor(Comparison, levels = levels_heatmap), y = Count, fill = sig)) +
+  geom_col(position = "stack", width = 0.7, color = "black") +
+  labs(x = "Control group", y = "Number of proteins", fill = "Significance") +
+  scale_fill_manual(values = c("significant up" = pal_de[[2]], "significant down" = pal_de[[3]], "not significant" = pal_de[[1]]))+
+  theme_light() +
+  theme(legend.position = "top", axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
+
+bar_plot_sig
+
+ggsave("Barplot DE significance.pdf", path = "results/heatmap/", width = 10, height = 7)
+```
+
+## D: Barplot DE fold changes
+
+```{r Barplot DE logfc, fig.width=10, fig.height=7}
+bar_plot_fold <- data_heatmap |>
+  mutate(fold=ifelse(logFC <= -2, "LogFC <= -2",
+                    ifelse(logFC >= 2, "LogFC >= 2", "Smaller logFC"))) |>
+  filter(fold != "Smaller logFC") |>
+  group_by(Comparison, fold) |>
+  filter(adj.P.Val < 0.05) |>
+  summarise(Count = n()) |>
+  ggplot(aes(x = factor(Comparison, levels = levels_heatmap), y = Count, fill = fold)) +
+  geom_col(position = "stack", width = 0.7, color = "black") +
+  labs(x = "Control group", y = "Number of proteins", fill = "LogFC") +
+  scale_fill_manual(values = c("LogFC >= 2" = pal_de[[2]], "LogFC <= -2" = pal_de[[3]]))+
+  theme_light() +
+  theme(legend.position = "top", axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
+
+bar_plot_fold
+
+ggsave("Barplot DE logFC.pdf", path = "results/heatmap/", width = 10, height = 7)
+```
+
+```{r Combining bar plots, fig.width=20, fig.height=7}
+bar_plot_sig + bar_plot_fold
+ggsave("Barplots DE significance and logFC.pdf", path = "results/heatmap/", width = 20, height = 7)
+```
+
