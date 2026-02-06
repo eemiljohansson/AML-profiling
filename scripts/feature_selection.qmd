@@ -1205,7 +1205,7 @@ ml_feature_network <- hd_plot_feature_network(feature_panel,
                         class_palette = control_pal)
 
 ml_feature_network
-ggsave("../plot/network/AML_LASSO_feature_network.pdf", width = 10, height = 7)
+ggsave("../plots/network/AML_LASSO_feature_network.pdf", width = 10, height = 7)
 ```
 
 Summary of the ML models

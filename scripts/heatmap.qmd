@@ -7,7 +7,29 @@ format: html
 
 ## Load packages
 
-## Read datata
+```{r}
+library(tidyverse) # v.2.0.0
+library(embed) # v.1.1.3
+library(umap) # v0.2.10.0
+library(ggrepel) # v.0.9.4
+library(readxl) # v.1.4.3
+library(openxlsx) # v.4.2.7
+library(HDAnalyzeR) # v.1.0.0
+library(ggridges) # v.0.5.6
+library(patchwork) # v.1.3.0
+library(ComplexUpset) # v.1.3.3
+library(doParallel) # v.1.0.17
+library(viridis) # v.0.6.5
+library(fmsb) # v.0.7.6
+library(RColorBrewer) # v.1.1-3
+library(writexl) # v.1.5.2
+```
+
+## Read data
+
+```{r}
+
+```
 
 # Figure 4: Comparing different control groups
 
@@ -52,18 +74,14 @@ shared_df <- combined_df %>%
   mutate(Shared_Comparisons = toString(names(.)[-1][c_across(-1) == TRUE])) |>
   dplyr::select(Feature, Shared_Comparisons, Count)
 
-upset(
-  combined_df,
-  names(de_res),
-  name = 'dataset',
-  width_ratio = 0.1,
-#  min_degree = 3,
-#  max_defree = 15,
-#  n_intersections = 100,
-  min_size = 0
+ComplexUpset::upset(
+  data = combined_df,
+  intersect = names(de_res),
+  name = "dataset"
 )
 
-ggsave("results/overlaps/AML_DE_Overlap_All.pdf", width = 20, height = 7)
+
+ggsave("../plots/upset/AML_DE_Overlap_All.pdf", width = 20, height = 7)
 ```
 
 ### S3A: Upregulated only
@@ -177,16 +195,22 @@ ggsave("results/overlaps/AML_DE_Overlap_Down.pdf", width = 20, height = 7)
 ```{r Heatmap combining data}
 # Prepare the data for the heatmap
 ml_combined_data <- lasso_res_aml_healthy$features |>
+  filter(Importance != 0) |>
   mutate(Comparison = "Healthy") |>
   bind_rows(lasso_res_aml_cancer$features |>
+              filter(Importance != 0) |>
               mutate(Comparison = "Pan-cancer")) |>
   bind_rows(lasso_res_aml_hm$features |>
+              filter(Importance != 0) |>
               mutate(Comparison = "Hematological malignancies")) |>
   bind_rows(lasso_res_aml_cll$features |>
+              filter(Importance != 0) |>
               mutate(Comparison = "CLL")) |>
   bind_rows(lasso_res_aml_dlbcl$features |>
+              filter(Importance != 0) |>
               mutate(Comparison = "DLBCL")) |>
   bind_rows(lasso_res_aml_myeloma$features |>
+              filter(Importance != 0) |>
               mutate(Comparison = "Myeloma"))
 ```
 
@@ -318,7 +342,7 @@ data_heatmap |>
   # adjust the x-axis ticks to 90 degrees
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1))
 
-ggsave("Heatmap DE and ML ordered.pdf", path = "results/heatmap/", width = 30, height = 5)
+ggsave("Heatmap DE and ML ordered.pdf", path = "../plots/heatmap/", width = 30, height = 5)
 ```
 
 ## C: Barplot DE significance
@@ -338,7 +362,7 @@ bar_plot_sig <- data_heatmap |>
 
 bar_plot_sig
 
-ggsave("Barplot DE significance.pdf", path = "results/heatmap/", width = 10, height = 7)
+ggsave("Barplot DE significance.pdf", path = "../plots/bar/", width = 10, height = 7)
 ```
 
 ## D: Barplot DE fold changes
@@ -360,11 +384,18 @@ bar_plot_fold <- data_heatmap |>
 
 bar_plot_fold
 
-ggsave("Barplot DE logFC.pdf", path = "results/heatmap/", width = 10, height = 7)
+ggsave("Barplot DE logFC.pdf", path = "../plots/bar/", width = 10, height = 7)
 ```
 
 ```{r Combining bar plots, fig.width=20, fig.height=7}
 bar_plot_sig + bar_plot_fold
-ggsave("Barplots DE significance and logFC.pdf", path = "results/heatmap/", width = 20, height = 7)
+ggsave("Barplots DE significance and logFC.pdf", path = "../plots/combined/", width = 20, height = 7)
 ```
 
+# SessionInfo
+
+```{r}
+sessionInfo()
+```
+
+End of file.
