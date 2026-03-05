@@ -19,10 +19,10 @@ This repository includes the code to generate the results describe above:
 ├── 📂 scripts/                # Core analysis scripts (Quarto)
 │   ├── 01_exploratory_analysis.qmd            # Exploration of the cohorts used in the project
 │   ├── 02_differential_analysis.qmd           # Differential analysis by limma
-│   ├── 03_gsea_analysis.qmd                   # GSEA
+│   ├── 03_enrichment_analysis.qmd             # Enrichment analysis by GSEA
 │   ├── 04_feature_selection.qmd               # Feature selection by LASSO
-│   ├── 05_heatmap.qmd                         # Summarizing results
-│   ├── 06_ukb_analysis                        # Overview of the UK-Biobank data
+│   ├── 05_analysis_summary.qmd                # Summarizing results
+│   ├── 06_ukb_summary                         # Overview of the UK-Biobank data
 │   └── 📂 functions/         # Core function scripts (Quarto)
 │       ├── custom_plots.R                  # Theme and palettes
 │       └── functions_disease_analyses.R    # Tailored functions for the project
