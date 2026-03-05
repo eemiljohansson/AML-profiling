@@ -1,10 +1,10 @@
 # AML-profiling
-This code was written to make the various analyses made in the study “Blood proteome profiling using proximity extension assay in patients with acute myeloid leukemia”.
+This code was written to make the various analyses made in the study “Blood Proteome Profiling Using Proximity Extension Assay in Patients with Acute Myeloid Leukemia”.
 
 # The study
 
 Acute Myeloid Leukemia (AML) is the most common form of acute leukemias in adults with low survival rate. Given the complexity of the disease, plasma proteomic profiling presents an opportunity to discover diagnostic biomarkers that could facilitate a shorter and simpler workflow for arriving at the diagnosis. This study was conducted by analyzing 1 158 unique proteins, measured in blood plasma, in 52 AML patients at diagnosis using the Olink Explore 1536 platform. Both differential expression analysis and feature selection were applied to find the most significant proteins to distinguish AML from 867 healthy individuals and 1 734 patients of varying cancer types, including different hematological malignancies. The analysis identified proteins with significant altered expression in AML patients, highlighting potential biomarkers.
-The results from the study are published in insert journal*: Johansson, E, et al. Blood proteome profiling using proximity extension assay in patients with acute myeloid leukemia. Insert journal here* (2024). insert DOI here*
+The results from the study are published in insert journal*: Johansson, E, et al. Blood Proteome Profiling Using Proximity Extension Assay in Patients with Acute Myeloid Leukemia. Insert journal here* (2026). insert DOI here*
 
 # Content
 
