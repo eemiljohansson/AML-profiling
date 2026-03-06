@@ -24,8 +24,7 @@ This repository includes the code to generate the results describe above:
 │   ├── 05_analysis_summary.qmd                # Summarizing results
 │   ├── 06_ukb_summary                         # Overview of the UK-Biobank data
 │   └── 📂 functions/         # Core function scripts (Quarto)
-│       ├── custom_plots.R                  # Theme and palettes
-│       └── functions_disease_analyses.R    # Tailored functions for the project
+│       └── custom_plots.R             # Theme and palettes
 ├── 📄 README.md               # Overview of the project
 └── 📜 LICENSE                 # License file
 ```
