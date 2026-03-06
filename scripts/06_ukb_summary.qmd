@@ -25,6 +25,14 @@ library(RColorBrewer) # v.1.1-3
 library(writexl) # v.1.5.2
 ```
 
+```{r}
+select <- dplyr::select
+filter <- dplyr::filter
+mutate <- dplyr::mutate
+arrange <- dplyr::arrange
+rename <- dplyr::rename
+```
+
 ## Themes and palettes
 
 ```{r}

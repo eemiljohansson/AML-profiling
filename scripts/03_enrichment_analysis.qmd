@@ -36,7 +36,6 @@ arrange <- dplyr::arrange
 rename <- dplyr::rename
 ```
 
-
 ## Read data
 
 ```{r}

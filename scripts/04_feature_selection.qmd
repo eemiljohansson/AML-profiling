@@ -31,8 +31,6 @@ library(fmsb) # v.0.7.6
 library(RColorBrewer) # v.1.1-3
 ```
 
-## Specifying function
-
 ```{r}
 select <- dplyr::select
 filter <- dplyr::filter
