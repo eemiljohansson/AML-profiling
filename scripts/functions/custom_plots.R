@@ -1,6 +1,6 @@
 library(ggplot2)
 library(dplyr)
-library(ggbeeswarm)  # for geom_quasirandom
+library(ggbeeswarm)
 
 # For DE analysis
 
