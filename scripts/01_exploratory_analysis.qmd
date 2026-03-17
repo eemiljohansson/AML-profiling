@@ -186,7 +186,7 @@ umap_all <- umap_data$umap_res |>
   ggplot(aes(UMAP1, UMAP2, color = Disease, fill = Disease)) +
   geom_point(aes(color = Disease), alpha = 0.7, size = 2) +
   geom_label_repel(data = umap_data_means, aes(x = UMAP1_mean, y = UMAP2_mean, label = Disease), 
-                   box.padding = 0.5, point.padding = 0.2, segment.color = NA,
+                   box.padding = 0.25, point.padding = 0.2, segment.color = NA,
                    size = 4, color = "black", alpha = 0.7, fontface = "bold") +
   theme_light() +
   scale_color_manual(values = pal_all) +
@@ -206,7 +206,7 @@ umap_hm <- umap_data$umap_res |>
   ggplot(aes(UMAP1, UMAP2, color = Disease, fill = Disease)) +
   geom_point(aes(color = Disease), alpha = 0.7, size = 2) +
   geom_label_repel(data = umap_data_means, aes(x = UMAP1_mean, y = UMAP2_mean, label = Disease), 
-                   box.padding = 0.5, point.padding = 0.2, segment.color = NA,
+                   box.padding = 0.25, point.padding = 0.2, segment.color = NA,
                    size = 4, color = "black", alpha = 0.8, fontface = "bold") +
   theme_light() +
   scale_color_manual(values = pal_hm) +
@@ -222,6 +222,65 @@ ggsave("../plots/UMAP/UMAP hematological malignancies.pdf", width = 10, height =
 umap_all / umap_hm 
 
 ggsave("../plots/UMAP/UMAP all and HM.pdf", width = 10, height = 14)
+```
+
+## PCA
+
+```{r PCA}
+# Default seed is 123
+pca_data <- hd_pca(dat = data_wide)
+```
+
+```{r PCA means}
+# Setting a seed
+pca_data_means <- pca_data$pca_res |>
+  left_join(metadata, by = "DAid") |>
+  group_by(Disease) |>
+  summarize(PC1_mean = mean(PC1), PC2_mean = mean(PC2))
+```
+
+```{r PCA plot all colors, fig.width=10, fig.height=7}
+pca_all <- pca_data$pca_res |>
+  right_join(metadata, by = "DAid") |>
+  ggplot(aes(PC1, PC2, color = Disease, fill = Disease)) +
+  geom_point(aes(color = Disease), alpha = 0.7, size = 2) +
+  geom_label_repel(data = pca_data_means, aes(x = PC1_mean, y = PC2_mean, label = Disease), 
+                   box.padding = 0.25, point.padding = 0.2, segment.color = NA,
+                   size = 4, color = "black", alpha = 0.7, fontface = "bold") +
+  theme_light() +
+  scale_color_manual(values = pal_all) +
+  scale_fill_manual(values = pal_all)
+  #+ guides(fill = F, color = F)
+
+pca_all
+
+ggsave("../plots/PCA/PCA all.pdf", width = 10, height = 7)
+```
+
+### Highlighting hematological malignancies
+
+```{r PCA plot HM colors, fig.width=10, fig.height=7}
+pca_hm <- pca_data$pca_res |>
+  right_join(metadata, by = "DAid") |>
+  ggplot(aes(PC1, PC2, color = Disease, fill = Disease)) +
+  geom_point(aes(color = Disease), alpha = 0.7, size = 2) +
+  geom_label_repel(data = pca_data_means, aes(x = PC1_mean, y = PC2_mean, label = Disease), 
+                   box.padding = 0.25, point.padding = 0.2, segment.color = NA,
+                   size = 4, color = "black", alpha = 0.8, fontface = "bold") +
+  theme_light() +
+  scale_color_manual(values = pal_hm) +
+  scale_fill_manual(values = pal_hm)
+  #+ guides(fill = F, color = F)
+
+pca_hm
+
+ggsave("../plots/PCA/PCA hematological malignancies.pdf", width = 10, height = 7)
+```
+
+```{r Supplementary PCA, fig.width=10, fig.height=14}
+pca_all / pca_hm 
+
+ggsave("../plots/PCA/PCA all and HM.pdf", width = 10, height = 14)
 ```
 
 # Exporting information
