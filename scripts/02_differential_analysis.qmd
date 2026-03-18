@@ -23,6 +23,7 @@ library(viridis) # v.0.6.5
 library(fmsb) # v.0.7.6
 library(RColorBrewer) # v.1.1-3
 library(writexl) # v.1.5.2
+library(eulerr) # v.7.0.2
 ```
 
 ```{r}
@@ -464,7 +465,7 @@ ggsave("../plots/volcano/Volcano plot AML vs Myeloma.pdf", width = 10, height = 
 ```{r Supplementary figures, fig.width=14, fig.height=20}
 # Preparing figure S2
 (volcano_aml_hm + volcano_aml_cll) / (volcano_aml_dlbcl + volcano_aml_myeloma)
-ggsave("../plots/volcano/Volcano plots AML vs all hm controls.pdf", width = 14, height = 20)
+ggsave("../plots/volcano/Volcano plots AML vs all hm controls.pdf", width = 14, height = 14)
 ```
 
 ```{r DE summary}
@@ -531,6 +532,74 @@ protein_summary <- protein_summary_aml_healthy |>
 protein_summary |>
   write_xlsx("../tables/DA_proteins_AML_vs_controls.xlsx")
 ```
+
+# Overlaps Between S2D-S2F
+
+```{r}
+protein_summary <- read_xlsx("../tables/DA_proteins_AML_vs_controls.xlsx")
+```
+
+```{r}
+# Define sets with proper names
+sets_up <- list(
+  CLL = protein_summary %>%
+    filter(sig_cll == "significant up") %>%
+    pull(Feature),
+
+  DLBCL = protein_summary %>%
+    filter(sig_lymphoma == "significant up") %>%
+    pull(Feature),
+
+  Myeloma = protein_summary %>%
+    filter(sig_myeloma == "significant up") %>%
+    pull(Feature)
+)
+
+# Create Euler object
+venn_plot <- euler(sets_up)
+
+pdf("../plots/venn/Venn diagram upregulated proteins.pdf", width = 7, height = 7)
+
+# Plot
+plot(venn_plot,
+     fills = list(fill = c("#2271B5", "#6D6D6D", "#66C2A5"), alpha = 0.5),
+     edges = TRUE,
+     labels = list(font = 2, cex = 1.5),        # <-- set names
+     quantities = list(cex = 1.5)               # <-- numbers
+)
+
+dev.off()
+
+
+sets_down <- list(
+  CLL = protein_summary %>%
+    filter(sig_cll == "significant down") %>%
+    pull(Feature),
+
+  DLBCL = protein_summary %>%
+    filter(sig_lymphoma == "significant down") %>%
+    pull(Feature),
+
+  Myeloma = protein_summary %>%
+    filter(sig_myeloma == "significant down") %>%
+    pull(Feature)
+)
+
+venn_plot_down <- euler(sets_down)
+
+pdf("../plots/venn/Venn diagram downregulated proteins.pdf", width = 7, height = 7)
+
+plot(venn_plot_down,
+     fills = list(fill = c("#2271B5", "#6D6D6D", "#66C2A5"), alpha = 0.5),
+     edges = TRUE,
+     labels = list(font = 2, cex = 1.5),
+     quantities = list(cex = 1.5)
+)
+
+dev.off()
+```
+
+
 
 # SessionInfo
 
