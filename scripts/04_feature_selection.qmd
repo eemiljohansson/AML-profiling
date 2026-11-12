@@ -41,7 +41,6 @@ mutate <- dplyr::mutate
 ## Scripts
 
 ```{r Loading scripts}
-source("../scripts/functions/functions_disease_analyses.R")
 source("../scripts/functions/custom_plots.R")
 ```
 
@@ -107,6 +106,7 @@ pal_de <- setNames(pal_de, c("not significant", "significant up", "significant d
 data_long <- read_csv("../data/data_long.csv")
 data_wide <- read_csv("../data/data_wide.csv")
 metadata <- read.csv("../data/metadata.csv")
+olink_data_long <- read_csv("../data/olink_data_long.csv")
 ```
 
 # Figure 3: Feature selection by LASSO
@@ -486,7 +486,7 @@ set.seed(123)
 case <- "AML"
 control <- c("CLL", "DLBCL", "Myeloma")
 m_f_ratio <- 1.25
-train_ratio <- 0.65
+train_ratio <- 0.7
 
 # Initialize lists to store training and test data for each control group
 training_list <- list()
@@ -1380,18 +1380,30 @@ write_xlsx(model_performance, "../tables/ML_model_performance.xlsx")
 
 ```{r}
 # Save the DE & ML results to an Excel file
-protein_summary <- protein_summary_aml_healthy |> 
-  full_join(ml_summary_aml_healthy, by = "Feature") |>
-  right_join(protein_summary_aml_cancer, by = "Feature") |>
-  full_join(ml_summary_aml_cancer, by = "Feature") |>
-  right_join(protein_summary_aml_hm, by = "Feature") |>
-  full_join(ml_summary_aml_hm, by = "Feature") |>
-  right_join(protein_summary_aml_cll, by = "Feature") |>
-  full_join(ml_summary_aml_cll, by = "Feature") |>
-  right_join(protein_summary_aml_dlbcl, by = "Feature") |>
-  full_join(ml_summary_aml_dlbcl, by = "Feature") |>
-  right_join(protein_summary_aml_myeloma, by = "Feature") |>
-  full_join(ml_summary_aml_myeloma, by = "Feature")
+## Only run if you already have run the differential abundance analysis
+#protein_summary <- protein_summary_aml_healthy |> 
+#  full_join(ml_summary_aml_healthy, by = "Feature") |>
+#  right_join(protein_summary_aml_cancer, by = "Feature") |>
+#  full_join(ml_summary_aml_cancer, by = "Feature") |>
+#  right_join(protein_summary_aml_hm, by = "Feature") |>
+#  full_join(ml_summary_aml_hm, by = "Feature") |>
+#  right_join(protein_summary_aml_cll, by = "Feature") |>
+#  full_join(ml_summary_aml_cll, by = "Feature") |>
+#  right_join(protein_summary_aml_dlbcl, by = "Feature") |>
+#  full_join(ml_summary_aml_dlbcl, by = "Feature") |>
+#  right_join(protein_summary_aml_myeloma, by = "Feature") |>
+#  full_join(ml_summary_aml_myeloma, by = "Feature")
+```
+
+# Save data
+
+```{r}
+saveRDS(lasso_res_aml_healthy, "../data/models/lasso_res_aml_healthy.rds")
+saveRDS(lasso_res_aml_cancer, "../data/models/lasso_res_aml_cancer.rds")
+saveRDS(lasso_res_aml_hm, "../data/models/lasso_res_aml_hm.rds")
+saveRDS(lasso_res_aml_cll, "../data/models/lasso_res_aml_cll.rds")
+saveRDS(lasso_res_aml_dlbcl, "../data/models/lasso_res_aml_dlbcl.rds")
+saveRDS(lasso_res_aml_myeloma, "../data/models/lasso_res_aml_myeloma.rds")
 ```
 
 # SessionInfo

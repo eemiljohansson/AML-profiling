@@ -103,37 +103,61 @@ plot_volcano <- function(data, logFC_column = "logFC", p_value_column = "adj.P.V
 ### Confusion matrix ###
 
 create_conf_plot <- function(conf_matrix, true_label_A, true_label_B) {
-  # Convert matrix to a tidy data frame
-  conf_df <- as.data.frame.matrix(conf_matrix) %>%
-    tidyr::pivot_longer(everything(), names_to = "Predicted_class", values_to = "n") %>%
-    mutate(Truth = rep(c(true_label_A, true_label_B), each = 2)) %>%
-    mutate(
-      Annotation_color = case_when(
-        Predicted_class == "1" & Truth == true_label_B ~ "#C5E0B3",  # TP
-        Predicted_class == "1" & Truth == true_label_A ~ "#FB8875",  # FP
-        Predicted_class == "0" & Truth == true_label_B ~ "#FB8875",  # FN
-        Predicted_class == "0" & Truth == true_label_A ~ "#C5E0B3"   # TN
-      )
-    )
+  class_codes <- c("0", "1")
+  class_labels <- c(true_label_A, true_label_B)
   
-  # Adjusting the factor levels for clarity and correct plotting
-  conf_df$Predicted_class <- factor(conf_df$Predicted_class, levels = c("0", "1"), labels = c(true_label_A, true_label_B))
-  conf_df$Truth <- factor(conf_df$Truth, levels = c(true_label_A, true_label_B))
+  if (length(dim(conf_matrix)) != 2L ||
+      !identical(dim(conf_matrix), c(2L, 2L)) ||
+      !setequal(rownames(conf_matrix), class_codes) ||
+      !setequal(colnames(conf_matrix), class_codes)) {
+    stop("conf_matrix must be a 2 x 2 table with rows and columns named '0' and '1'.")
+  }
   
-  # Plot the confusion matrix
-  plot <- conf_df %>%
-    ggplot(aes(x = Predicted_class, y = Truth, fill = Annotation_color)) +
-    geom_tile(color = "white") +  # Add white borders for clarity
-    geom_text(aes(label = n), color = "black", size = 6) +  # Show count
-    scale_fill_identity(name = "Outcome", labels = c("TP", "FP", "FN", "TN"), guide = "none") +
-    coord_fixed() +  # Ensure square tiles
-    theme_minimal() +  # Minimal theme
-    labs(
+  axis_names <- names(dimnames(conf_matrix))
+  if (!is.null(axis_names) &&
+      !identical(tolower(axis_names), c("prediction", "truth"))) {
+    stop("Expected Prediction in the rows and Truth in the columns.")
+  }
+  
+  # Read the counts using the matrix's class codes.
+  conf_df <- expand.grid(
+    Prediction = class_codes,
+    Truth = class_codes,
+    stringsAsFactors = FALSE
+  )
+  conf_df$n <- as.numeric(conf_matrix[cbind(
+    match(conf_df$Prediction, rownames(conf_matrix)),
+    match(conf_df$Truth, colnames(conf_matrix))
+  )])
+  conf_df$Correct <- conf_df$Prediction == conf_df$Truth
+  
+  conf_df$Prediction <- factor(
+    conf_df$Prediction, levels = class_codes, labels = class_labels
+  )
+  conf_df$Truth <- factor(
+    conf_df$Truth, levels = class_codes, labels = class_labels
+  )
+  
+  # Match the order on both axes when read left to right and top to bottom.
+  display_order <- c(true_label_B, true_label_A)
+  
+  ggplot2::ggplot(
+    conf_df,
+    ggplot2::aes(x = Prediction, y = Truth, fill = Correct)
+  ) +
+    ggplot2::geom_tile(color = "white") +
+    ggplot2::geom_text(ggplot2::aes(label = n), color = "black", size = 6) +
+    ggplot2::scale_x_discrete(limits = display_order) +
+    ggplot2::scale_y_discrete(limits = rev(display_order)) +
+    ggplot2::scale_fill_manual(
+      values = c("TRUE" = "#C5E0B3", "FALSE" = "#FB8875"),
+      guide = "none"
+    ) +
+    ggplot2::coord_fixed() +
+    ggplot2::theme_minimal() +
+    ggplot2::labs(
       x = "Predicted Condition",
       y = "True Condition",
-      title = paste("Confusion Matrix for", true_label_B, "vs.", true_label_A, "Classification"),
-      fill = "Outcome"
+      title = paste("Confusion Matrix for", true_label_B, "vs.", true_label_A)
     )
-  
-  return(plot)
 }
